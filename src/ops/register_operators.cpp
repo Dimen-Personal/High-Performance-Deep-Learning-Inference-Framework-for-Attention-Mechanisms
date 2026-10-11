@@ -2,6 +2,9 @@
 
 #include "ops/cpu/gelu_operator.h"
 #include "ops/cuda/gelu_operator.h"
+#include "ops/cpu/matmul_operator.h"
+#include "ops/cuda/matmul_operator.h"
+
 
 #include <memory>  // C++ 内存管理工具，尤其是指针
 
@@ -18,7 +21,14 @@ void OperatorRegistry::register_builtin_operators(){
     );
 
 
-     
+    registry_operator(
+        "MatMul",
+        DeviceType::CPU,
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CpuMatmulOperator>();
+        }
+    );
+
 
 
 
@@ -29,6 +39,15 @@ void OperatorRegistry::register_builtin_operators(){
         DeviceType::CUDA,
         []() -> std::unique_ptr<Operator>{
             return std::make_unique<CudaGeluOperator>();
+        }
+    );
+
+
+    registry_operator(
+        "Matmul",
+        DeviceType::CUDA,
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CudaMatmulOperator>();
         }
     );
         
