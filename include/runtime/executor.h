@@ -8,6 +8,8 @@
 #include "runtime/memory_planner.h"
 #include "runtime/cuda_memory_pool.h"
 
+#include "ops/operator_registry.h"
+
 #include <string>
 #include <unordered_map>
 
@@ -28,11 +30,16 @@ class Executor{
         std::size_t memory_block_count() const;
         std::size_t memory_capacity_count() const;
 
+        // Public access for inner tool
+        OperatorRegistry& operator_registry();
+        const OperatorRegistry& operator_registry() const;
+
 
     private:
         std::unordered_map<std::string, Tensor> tensors_;
         std::unordered_map<std::string, std::vector<int>> tensor_shapes_;
         std::unordered_map<std::string, DeviceType> tensor_devices_;
+        OperatorRegistry operator_registry_;
         
 
         void execute_node(const Node& node);
@@ -44,12 +51,13 @@ class Executor{
         void release_tensor_if_dead(const std::string& name, int step);
 
         // sub function of the execute_node.
+        /*
         void execute_node_attention_softmax(const Node& node);
         void execute_matmul(const Node& node);
         void execute_gelu(const Node& node);
         void execute_layernorm(const Node& node);
         void execute_attention_scores(const Node& node);
-
-};
+        */
+};      
 
 #endif
