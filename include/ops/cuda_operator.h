@@ -1,5 +1,5 @@
 #ifndef CUDA_OPERATOR_H
-#define cuda_OPERATOR_H
+#define CUDA_OPERATOR_H
 
 #include "ops/operator_base.h"
 

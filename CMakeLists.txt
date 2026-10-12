@@ -727,17 +727,22 @@ set_property(
 add_executable(
     cuda_executor_attention_test
 
+    # Test
     tests/cuda/executor/test_cuda_executor_attention.cu
 
+    # Tensor
     src/tensor/tensor.cpp
 
+    # Graph
     src/graph/node.cpp
     src/graph/graph.cpp
 
+    # Runtime
     src/runtime/executor.cpp
     src/runtime/memory_pool.cpp
     src/runtime/memory_planner.cpp
 
+    # Original CPU Kernels
     src/ops/attention/gelu.cpp
     src/ops/attention/layernorm.cpp
     src/ops/attention/softmax.cpp
@@ -747,7 +752,23 @@ add_executable(
     src/ops/attention/attention_softmax.cpp
     src/ops/attention/scaled_dot_product_attention.cpp
 
-    src/ops/
+    # Operator Registry
+    src/ops/operator_registry.cpp
+    src/ops/register_operators.cpp
+
+    # CPU Polymorphic Operators
+    src/ops/cpu/gelu_operator.cpp
+    src/ops/cpu/matmul_operator.cpp
+    src/ops/cpu/layernorm_operator.cpp
+    src/ops/cpu/attention_scores_operator.cpp
+    src/ops/cpu/attention_softmax_operator.cpp
+
+    # CUDA Polymorphic Operators
+    src/ops/cuda/gelu_operator.cpp
+    src/ops/cuda/matmul_operator.cpp
+    src/ops/cuda/layernorm_operator.cpp
+    src/ops/cuda/attention_scores_operator.cpp
+    src/ops/cuda/attention_softmax_operator.cpp
 )
 
 target_include_directories(

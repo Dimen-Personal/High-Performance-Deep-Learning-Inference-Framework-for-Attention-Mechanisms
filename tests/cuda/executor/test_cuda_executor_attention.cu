@@ -313,6 +313,8 @@ bool test_executor_attention_scores()
 
     GpuTestContext context;
 
+    context.executor.operator_registry().register_builtin_operators();
+
     context.add_input(Q);
     context.add_input(K);
 
@@ -395,6 +397,8 @@ bool test_executor_attention_softmax()
     );
 
     GpuTestContext context;
+
+    context.executor.operator_registry().register_builtin_operators();
 
     context.add_input(scores);
 
@@ -564,6 +568,8 @@ bool test_executor_attention_end_to_end()
 
     GpuTestContext context;
 
+
+    context.executor.operator_registry().register_builtin_operators();
     context.add_input(Q);
     context.add_input(K);
     context.add_input(V);

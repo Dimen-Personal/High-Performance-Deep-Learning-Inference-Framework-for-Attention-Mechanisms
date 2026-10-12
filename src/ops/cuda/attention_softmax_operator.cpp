@@ -1,5 +1,5 @@
 #include "ops/cuda/attention_softmax_operator.h"
-#include "ops/operator.h"
+#include "cuda/cuda_ops.cuh"
 
 #include <stdexcept>
 
@@ -52,7 +52,7 @@ void CudaAttentionSoftmaxOperator::execute(
 
 
    
-    attention_softmax(
+    cuda_attention_softmax(
         input->data(),
         output->data(),
         seq_len
