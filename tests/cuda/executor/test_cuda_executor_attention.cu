@@ -224,6 +224,7 @@ bool test_executor_matmul()
 
     GpuTestContext context;
 
+    context.executor.operator_registry().register_builtin_operators();
     context.add_input(A);
     context.add_input(B);
 
