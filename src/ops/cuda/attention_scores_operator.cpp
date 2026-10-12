@@ -27,9 +27,9 @@ void CudaAttentionScoresOperator::execute(
 
     
     if(
-        Q->device() != DeviceType::CPU ||
-        K->device() != DeviceType::CPU ||
-        scores->device() != DeviceType::CPU
+        Q->device() != DeviceType::CUDA ||
+        K->device() != DeviceType::CUDA ||
+        scores->device() != DeviceType::CUDA
     )
         throw std::runtime_error("CpuAttentionScoresOperator requires CPU tensors.");
 

@@ -746,6 +746,8 @@ add_executable(
     src/ops/attention/attention_scores.cpp
     src/ops/attention/attention_softmax.cpp
     src/ops/attention/scaled_dot_product_attention.cpp
+
+    src/ops/
 )
 
 target_include_directories(

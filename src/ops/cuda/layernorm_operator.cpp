@@ -26,7 +26,7 @@ void CudaLayerNormOperator::execute(
         throw std::runtime_error("CpuLayerNormOperator received a null tensor.");
 
 
-    if(input->device() != DeviceType::CPU || gamma->device() != DeviceType::CPU || beta->device() != DeviceType::CPU || output->device() != DeviceType::CPU)
+    if(input->device() != DeviceType::CUDA || gamma->device() != DeviceType::CUDA || beta->device() != DeviceType::CUDA || output->device() != DeviceType::CUDA)
         throw std::runtime_error("CpuLayerNormOperator requires CPU tensors.");
 
     if(input->size() != gamma->size() || input->size() != beta->size() || input->size() != output->size())

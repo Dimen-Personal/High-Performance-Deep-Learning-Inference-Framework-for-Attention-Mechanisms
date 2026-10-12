@@ -26,9 +26,9 @@ void CudaMatmulOperator::execute(
 
     
     // Device Validation
-    if(A -> device() != DeviceType::CPU ||
-       B -> device() != DeviceType::CPU ||
-       C -> device() != DeviceType::CPU)
+    if(A -> device() != DeviceType::CUDA ||
+       B -> device() != DeviceType::CUDA ||
+       C -> device() != DeviceType::CUDA)
         throw std::runtime_error("CpuMatmulOperator requires CPU tensors.");
 
 
