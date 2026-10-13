@@ -57,4 +57,17 @@ void cuda_attention_softmax(
     int seq_len
 );
 
+// Second version of the cuda_attention_softmax
+// Second version of the cuda_attention_softmax
+void cuda_attention_softmax_multiblock(
+    const float* socres,
+    float* weights,
+    float* partial_max,   // Allocate space for the SM communication prior to the actual execution.
+    float* partial_sum,
+    float* row_max,
+    float* row_sum,
+    int seq_len,
+    int blocks_per_row    // Decide use how many blocks to deal with a row.
+);
+
 #endif
