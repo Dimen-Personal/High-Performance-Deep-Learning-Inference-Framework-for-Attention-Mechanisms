@@ -69,7 +69,7 @@ void attention_softmax_partial_max_kernel(
     if(row >= seq_len)
         return;
 
-    const int row_offset = row * blocks_per_row;
+    const int row_offset = row * seq_len;
     float local_max = -FLT_MAX; // 指的是当前thread负责的所有instance的Max
 
     
@@ -90,6 +90,7 @@ void attention_softmax_partial_max_kernel(
 
 // Kernel2: row max
 // 注意这边是一个block去处理partial score里的一行
+__global__
 void attention_softmax_row_max_kernel(
     const float* partial_max,
     float* row_max,

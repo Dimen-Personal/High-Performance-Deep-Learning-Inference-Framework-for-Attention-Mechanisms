@@ -7,9 +7,22 @@
 #include <vector>
 
 
+bool comapre_results(
+
+
+
+
+
+
+
+
+
 int main(){
+
+    // We will do three reference at here.
     const int seq_len = 4;
     const float tolerance = 1e-5f;
+    const int blocks_per_row = 4;
 
     std::vector<float> scores = {
         2.0f,     -INFINITY, -INFINITY, -INFINITY,
@@ -23,7 +36,8 @@ int main(){
 
 
     std::vector<float> cpu_weights(seq_len * seq_len);
-    std::vector<float> gpu_weights(seq_len * seq_len);
+    std::vector<float> single_weights(seq_len * seq_len);
+    std::vector<float> multi_weights(seq_len * seq_len);
 
 
     // CPU Reference
@@ -33,24 +47,44 @@ int main(){
 
     // CUDA Allocation
     float* d_scores = nullptr;
-    float* d_weights = nullptr;
+    
+    float* d_single_weights = nullptr;
+    float* d_multi_weights = nullptr;
+    
+    float* d_partial_max = nullptr;
+    float* d_partial_sum = nullptr;
 
-    const std::size_t bytes = static_cast<std::size_t>(seq_len * seq_len) * sizeof(float);
-
-    cudaMalloc(&d_scores, bytes);
-    cudaMalloc(&d_weights, bytes);
-
-    cudaMemcpy(d_scores, scores.data(), bytes, cudaMemcpyHostToDevice);
+    float* d_row_max = nullptr;
+    float* d_row_sum = nullptr;
 
 
 
 
-    // CUDA Attention softmax
-    cuda_attention_softmax(d_scores, d_weights, seq_len);
+    //const std::size_t bytes = static_cast<std::size_t>(seq_len * seq_len) * sizeof(float);
+    const std::size_t matrix_bytes = static_cast<std::size_t>(seq_len * seq_len) * sizeof(float);
+    const std::size_t partial_bytes = static_cast<std::size_t>(seq_len * blocks_per_row) * sizeof(float);
+    const std::size_t row_bytes = static_cast<std::size_t>(seq_len) * sizeof(float);
+
+    cudaMalloc(&d_scores, matrix_bytes);
+    cudaMalloc(&d_single_weights, matrix_bytes);
+    cudaMalloc(&d_multi_weights, matrix_bytes);
+    cudaMalloc(&d_partial_max, partial_bytes);
+    cudaMalloc(&d_partial_sum, partial_bytes);
+    cudaMalloc(&d_row_max, row_bytes);
+    cudaMalloc(&d_row_sum, row_bytes);
+
+    cudaMemcpy(d_scores, scores.data(), matrix_bytes, cudaMemcpyHostToDevice);
+
+
+
+
+
+    // CUDA Attention softmax (single block version)
+    cuda_attention_softmax(d_scores, d_single_weights, seq_len);
 
     cudaDeviceSynchronize();
 
-    cudaMemcpy(gpu_weights.data(), d_weights, bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(single_weights.data(), d_single_weights, matrix_bytes, cudaMemcpyDeviceToHost);
 
 
 
