@@ -679,7 +679,7 @@ add_executable(
     src/cuda/ops/matmul.cu
     src/cuda/ops/attention_scores.cu
     src/cuda/ops/attention_softmax.cu
-    src/cuda/ops/attension_softmax_multiblock.cu
+    src/cuda/ops/attention_softmax_multiblock.cu
 )
 
 

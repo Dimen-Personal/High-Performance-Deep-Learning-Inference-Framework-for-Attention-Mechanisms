@@ -60,7 +60,7 @@ void cuda_attention_softmax(
 // Second version of the cuda_attention_softmax
 // Second version of the cuda_attention_softmax
 void cuda_attention_softmax_multiblock(
-    const float* socres,
+    const float* scores,
     float* weights,
     float* partial_max,   // Allocate space for the SM communication prior to the actual execution.
     float* partial_sum,
