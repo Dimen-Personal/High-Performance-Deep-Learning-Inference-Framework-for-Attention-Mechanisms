@@ -185,7 +185,7 @@ void attention_softmax_row_sum_kernel(
         local_sum += partial_sum[row * blocks_per_row + i];
 
 
-    const float total_sum = block_reduce_sum(local_sum, sahred);
+    const float total_sum = block_reduce_sum(local_sum, shared);
 
     if(tid == 0)
         row_sum[row] = total_sum;
@@ -196,7 +196,7 @@ void attention_softmax_row_sum_kernel(
 
 // Kernel 5: normalize
 __global__
-void atention_softmax_normalize_kernel(
+void attention_softmax_normalize_kernel(
     float* weights,
     const float* row_sum,
     int seq_len,
