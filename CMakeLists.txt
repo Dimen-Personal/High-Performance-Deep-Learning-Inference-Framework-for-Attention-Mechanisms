@@ -658,7 +658,7 @@ add_executable(
     src/graph/node.cpp
     src/graph/graph.cpp
 
-    src/runtime/executor.cpp
+    # src/runtime/executor.cpp
     src/runtime/memory_pool.cpp
     src/runtime/memory_planner.cpp
     src/runtime/cuda_memory_pool.cu
@@ -673,6 +673,7 @@ add_executable(
     src/ops/attention/attention_softmax.cpp
     src/ops/attention/scaled_dot_product_attention.cpp
 
+ 
     src/cuda/ops/gelu.cu
     src/cuda/ops/layernorm.cu
     src/cuda/ops/softmax.cu
