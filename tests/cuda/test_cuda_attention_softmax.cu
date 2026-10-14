@@ -8,8 +8,63 @@
 
 
 bool comapre_results(
+    const std::vector<float>& reference,
+    const std::vector<float>& result,
+    float tolerance,
+    const char* name
+){
+    if(reference.size() != result.size())
+        return false;
+
+    for(std::size_t i = 0; i < reference.size(); i++){
+        const float ref = reference[i];
+        const float value = result[i];
+
+        if(std::isnan(ref) || std::isnan(value)){
+            std::cout << name << ": NaN at index " << i << std::endl;
+            return false;
+        }
 
 
+        const float diff = std::fabs(ref - value);
+        if(diff > tolerance){
+            std::cout << name << ": mismatch at index " << i << std::endl;
+            std::cout << "Reference = " << ref << std::endl;
+            std::cout << "Result = " << value << std::endl;
+            std::cout << "Diff = " << diff << std::endl;
+
+            return false;
+        }
+    }
+
+
+    return true;
+}
+
+
+
+bool check_row_sums(
+    const std::vector<float>& weights,
+    int seq_len,
+    float tolerance,
+    const char* name
+){
+    for(int row = 0; row < seq_len; row++){
+        float sum = 0.0f;
+
+        for(int col = 0; col < seq_len; col ++)
+            sum += weights[row * seq_len + col];
+
+        if(std::fabs(sum - 1.0f) > tolerance){
+            std::cout << name << ": row" << row << " sum = " << sum <<std::endl;
+
+            return false;
+        }
+    }
+
+
+    return true;
+}
 
 
 
@@ -88,6 +143,78 @@ int main(){
 
 
 
+
+    // CUDA Attention softmax (multi block version)
+    cuda_attention_softmax_multiblock(
+        d_scores,
+        d_multi_weights,
+
+        d_partial_max,
+        d_partial_sum,
+
+        d_row_max,
+        d_row_sum,
+
+        seq_len,
+        blocks_per_row
+    );
+
+    cudaDeviceSynchronize();
+
+    cudaMemcpy(multi_weights.data(), d_multi_weights, matrix_bytes, cudaMemcpyDeviceToHost);
+
+
+
+
+
+    // Verification and correctness.
+    const bool single_correct = comapre_results(
+        cpu_weights,
+        single_weights,
+        tolerance,
+        "single block"
+    );
+
+    const bool multi_correct = comapre_results(
+        cpu_weights,
+        multi_weights,
+        tolerance,
+        "multi block"
+    );
+
+    const bool single_sum_correct = check_row_sums(
+        single_weights,
+        seq_len,
+        tolerance, 
+        "Single block"
+    );
+
+    const bool multi_sum_correct = check_row_sums(
+        multi_weights,
+        seq_len,
+        tolerance,
+        "Multi block"
+    );
+
+
+    std::cout << "single block softmax: " << (single_correct && single_sum_correct ? "PASS" : "FAIL") << std::endl;
+    std::cout << "multi block softmax: " << (multi_correct && multi_sum_correct ? "PASS" : "FAIL") << std::endl;
+
+
+    cudaFree(d_scores);
+    cudaFree(d_single_weights);
+    cudaFree(d_multi_weights);
+    cudaFree(d_partial_max);
+    cudaFree(d_partial_sum);
+    cudaFree(d_row_max);
+    cudaFree(d_row_sum);
+
+
+    const bool correct = single_correct && multi_correct && single_sum_correct && multi_sum_correct;
+
+    return correct ? 0 : 1;
+
+    /*
     // Comapare
     bool correct = true;
 
@@ -123,5 +250,7 @@ int main(){
     
 
     return correct ? 0 : 1;
+*/
+
 
 }
