@@ -125,3 +125,13 @@ cmake --build build --target cuda_vector_add_test
 
 -S . 代表源目录位置在.  -B 生成出来的构建文件放到哪里。
 cmake -S . -B build   
+
+
+
+
+nsys profile \
+    --trace=cuda \
+    --sample=none \
+    --cpuctxsw=none \
+    -o softmax_multi_8192 \
+    ./build/cuda_attention_softmax_profile 8192 multi 4
