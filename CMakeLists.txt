@@ -819,3 +819,55 @@ set_property(
     TARGET cuda_executor_attention_test
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+# CUDA Attention Softmax Benchmark
+add_executable(
+    cuda_attention_softmax_benchmark
+
+    benchmark/cuda/benchmark_cuda_attention_softmax.cu
+
+    src/cuda/ops/attention_softmax.cu
+    src/cuda/ops/attention_softmax_multiblock.cu
+)
+
+
+target_include_directories(
+    cuda_attention_softmax_benchmark
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+set_property(
+    TARGET cuda_attention_softmax_benchmark
+    PROPERTY CUDA_ARCHITECTURES 70
+)
+
+
+
+
+
+# CUDA Attention Softmax Profile
+add_executable(
+    cuda_attention_softmax_profile
+
+    benchmark/cuda/benchmark_profile_cuda_attention_softmax.cu
+
+    src/cuda/ops/attention_softmax.cu
+    src/cuda/ops/attention_softmax_multiblock.cu
+)
+
+
+target_include_directories(
+    cuda_attention_softmax_profile
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+set_property(
+    TARGET cuda_attention_softmax_profile
+    PROPERTY CUDA_ARCHITECTURES 70
+)

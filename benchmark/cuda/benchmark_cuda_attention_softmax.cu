@@ -14,7 +14,7 @@ float benchmark_single_block(
     int benchmark_runs
 ){
     for(int i = 0; i < warmup_runs; i++)
-        cuda_attention_softmax(d_socres, d_weights, seq_len);
+        cuda_attention_softmax(d_scores, d_weights, seq_len);
 
     cudaDeviceSynchronize();
 
@@ -134,7 +134,8 @@ int main()
         1024,
         2048,
         4096,
-        8192
+        8192,
+        12000
     };
 
 
