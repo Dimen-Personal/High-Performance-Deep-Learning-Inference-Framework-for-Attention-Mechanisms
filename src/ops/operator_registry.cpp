@@ -57,3 +57,9 @@ bool OperatorRegistry::contains(const std::string& type, DeviceType device) cons
 }
 
 
+
+// Meters Singleton
+OperatorRegistry& OperatorRegistry::instance(){
+    static OperatorRegistry registry;    // static 局部变量只会在第一次运行的时候创建一次然后后面再次调用就会返回已经创建的实例。
+    return registry;
+}

@@ -18,23 +18,9 @@
 void OperatorRegistry::register_builtin_operators(){
 
     // CPU at here
-    registry_operator(
-        "GELU",
-        DeviceType::CPU,
-        []() -> std::unique_ptr<Operator>{      //[capture](parameters) -> return_type {function body}   Lambada
-            return std::make_unique<CpuGeluOperator>();
-        }
-    );
+    
 
-
-    registry_operator(
-        "MatMul",
-        DeviceType::CPU,
-        []() -> std::unique_ptr<Operator>{
-            return std::make_unique<CpuMatmulOperator>();
-        }
-    );
-
+ 
 
     registry_operator(
         "LayerNorm",
@@ -64,22 +50,10 @@ void OperatorRegistry::register_builtin_operators(){
 
 
     // CUDA at here
-    registry_operator(
-        "GELU",
-        DeviceType::CUDA,
-        []() -> std::unique_ptr<Operator>{
-            return std::make_unique<CudaGeluOperator>();
-        }
-    );
+   
 
 
-    registry_operator(
-        "MatMul",
-        DeviceType::CUDA,
-        []() -> std::unique_ptr<Operator>{
-            return std::make_unique<CudaMatmulOperator>();
-        }
-    );
+     
         
 
     registry_operator(

@@ -1,5 +1,6 @@
 #include "ops/cpu/layernorm_operator.h"
 #include "ops/operator.h"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -38,4 +39,16 @@ void CpuLayerNormOperator::execute(
 
     layer_norm(input->data(), gamma->data(), beta->data(), output->data(), static_cast<int>(input->size()), epsilon);
 
+}
+
+
+namespace{
+    OperatorRegistrar cpu_layernorm_registrar(
+        "LayerNorm",
+        DeviceType::CPU,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CpuLayerNormOperator>();
+        }
+    );
 }

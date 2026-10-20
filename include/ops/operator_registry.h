@@ -16,6 +16,11 @@ class OperatorRegistry{
         using OperatorFactory = std::function<std::unique_ptr<Operator>()>;     // 重命名一个比较复杂的类型定义,用途是把符合这个定义条件的function加载到我们后面给的名字里。
 
 
+        // Now we change regostry to a global instance. 去实现 singleton
+        static OperatorRegistry& instance();
+
+
+
         // Register an implementation.
         void registry_operator(
             const std::string& type,
@@ -45,6 +50,10 @@ class OperatorRegistry{
 
 
     private:
+
+        // Set constructor as private, 这样只能被自己类内的成员进行调用。
+        OperatorRegistry() = default;
+
 
         // Key = (operator type, device).
         using OperatorKey = std::pair<std::string, DeviceType>;

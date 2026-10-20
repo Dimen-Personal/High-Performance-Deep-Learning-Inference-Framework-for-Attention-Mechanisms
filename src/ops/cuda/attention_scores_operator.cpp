@@ -1,5 +1,6 @@
 #include "ops/cuda/attention_scores_operator.h"
 #include "cuda/cuda_ops.cuh"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -69,5 +70,19 @@ void CudaAttentionScoresOperator::execute(
         scores->data(),
         seq_len,
         head_dim
+    );
+}
+
+
+
+
+namespace{
+    OperatorRegistrar cuda_attentionscores_registrar(
+        "AttentionScores",
+        DeviceType::CUDA,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CudaAttentionScoresOperator>();
+        }
     );
 }

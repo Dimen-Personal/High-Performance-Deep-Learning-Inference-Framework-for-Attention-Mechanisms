@@ -1,5 +1,6 @@
 #include "ops/cuda/gelu_operator.h"
 #include "cuda/cuda_ops.cuh"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -29,3 +30,15 @@ void CudaGeluOperator::execute(
     cuda_gelu(input->data(), output->data(), static_cast<int>(input -> size()));
 }
 
+
+
+namespace{
+    OperatorRegistrar cuda_gelu_registrar(
+        "GELU",
+        DeviceType::CUDA,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CudaGeluOperator>();
+        }
+    );
+}

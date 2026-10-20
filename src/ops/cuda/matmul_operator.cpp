@@ -1,5 +1,6 @@
 #include "ops/cuda/matmul_operator.h"
 #include "cuda/cuda_ops.cuh"
+#include "ops/operator_registry.h"
 
 #include <stdexcept>
 
@@ -58,4 +59,25 @@ void CudaMatmulOperator::execute(
 
 
     cuda_matmul(A -> data(), B -> data(), C -> data(), M, K, N);
+}
+
+
+
+namespace{
+    bool register_cuda_matmul(){
+        OperatorRegistry::instance().registry_operator(
+            "MatMul",
+            DeviceType::CUDA,
+
+            []() -> std::unique_ptr<Operator>{
+                return std::make_unique<CudaMatmulOperator>();
+            }
+        );
+
+        return true;
+    }
+
+
+    const bool cuda_gelu_registered = register_cuda_matmul();
+
 }

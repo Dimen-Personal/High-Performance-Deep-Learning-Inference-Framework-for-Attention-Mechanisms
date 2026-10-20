@@ -1,5 +1,6 @@
 #include "ops/cpu/attention_scores_operator.h"
 #include "ops/operator.h"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -69,5 +70,17 @@ void CpuAttentionScoresOperator::execute(
         scores->data(),
         seq_len,
         head_dim
+    );
+}
+
+
+namespace{
+    OperatorRegistrar cpu_gelu_registrar(
+        "AttentionScores",
+        DeviceType::CPU,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CpuAttentionScoresOperator>();
+        }
     );
 }

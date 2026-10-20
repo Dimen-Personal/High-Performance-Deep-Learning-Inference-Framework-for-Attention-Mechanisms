@@ -1,7 +1,9 @@
 #include "ops/cpu/gelu_operator.h"
 #include "ops/operator.h"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
+#include <memory>
 
 
 void CpuGeluOperator::execute(
@@ -29,4 +31,17 @@ void CpuGeluOperator::execute(
 
     gelu(input->data(), output->data(), static_cast<int>(input->size()));
 
+}
+
+
+// Only could be seen in this file.
+namespace{
+    OperatorRegistrar cpu_gelu_registrar(
+        "GELU",
+        DeviceType::CPU,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CpuGeluOperator>();
+        }
+    );
 }

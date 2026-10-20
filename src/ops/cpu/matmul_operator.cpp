@@ -1,5 +1,6 @@
 #include "ops/cpu/matmul_operator.h"
 #include "ops/operator.h"
+#include "ops/operator_registry.h"
 
 #include <stdexcept>
 
@@ -62,5 +63,26 @@ void CpuMatmulOperator::execute(
 
     // 2. Final real execute implementation.
     matmul(A -> data(), B -> data(), C -> data(), M, K, N);
+
+}
+
+
+// 自动注册的本质就是利用编译器的执行顺序在main之前会去算各个全局变量，因此我们只要定义一个需要初始化的全局变量就能做到自动注册。
+namespace{
+    bool register_cpu_matmul(){
+        OperatorRegistry::instance().registry_operator(
+            "MatMul",
+            DeviceType::CPU,
+
+            []() -> std::unique_ptr<Operator>{
+                return std::make_unique<CpuMatmulOperator>();
+            }
+        );
+
+        return true;
+    }
+
+
+    const bool cpu_gelu_registered = register_cpu_matmul();
 
 }

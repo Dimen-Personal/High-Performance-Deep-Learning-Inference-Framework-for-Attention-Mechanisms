@@ -1,5 +1,6 @@
 #include "ops/cuda/layernorm_operator.h"
 #include "cuda/cuda_ops.cuh"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -38,4 +39,17 @@ void CudaLayerNormOperator::execute(
 
     cuda_layer_norm(input->data(), gamma->data(), beta->data(), output->data(), static_cast<int>(input->size()), epsilon);
 
+}
+
+
+
+namespace{
+    OperatorRegistrar cuda_gelu_registrar(
+        "LayerNorm",
+        DeviceType::CUDA,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CudaLayerNormOperator>();
+        }
+    );
 }

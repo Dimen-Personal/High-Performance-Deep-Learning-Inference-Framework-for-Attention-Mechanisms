@@ -1,5 +1,6 @@
 #include "ops/cpu/attention_softmax_operator.h"
 #include "ops/operator.h"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -56,5 +57,20 @@ void CpuAttentionSoftmaxOperator::execute(
         input->data(),
         output->data(),
         seq_len
+    );
+}
+
+
+
+
+
+namespace{
+    OperatorRegistrar cpu_attentionsoftmax_registrar(
+        "AttentionSoftmax",
+        DeviceType::CPU,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CpuAttentionSoftmaxOperator>();
+        }
     );
 }

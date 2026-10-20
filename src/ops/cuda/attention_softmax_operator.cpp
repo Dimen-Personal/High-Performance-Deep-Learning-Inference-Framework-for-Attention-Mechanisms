@@ -1,5 +1,6 @@
 #include "ops/cuda/attention_softmax_operator.h"
 #include "cuda/cuda_ops.cuh"
+#include "ops/operator_registrar.h"
 
 #include <stdexcept>
 
@@ -56,5 +57,18 @@ void CudaAttentionSoftmaxOperator::execute(
         input->data(),
         output->data(),
         seq_len
+    );
+}
+
+
+
+namespace{
+    OperatorRegistrar cuda_attentionsoftmax_registrar(
+        "AttentionSoftmax",
+        DeviceType::CUDA,
+
+        []() -> std::unique_ptr<Operator>{
+            return std::make_unique<CudaAttentionSoftmaxOperator>();
+        }
     );
 }
