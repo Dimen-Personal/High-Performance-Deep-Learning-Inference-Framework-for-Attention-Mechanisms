@@ -20,11 +20,11 @@ void matmul_kernel(const float* A, const float* B, float* C, int M, int K, int N
 
 
 
-void cuda_matmul(const float* A, const float* B, float* C, int M, int K, int N){
+void cuda_matmul(const float* A, const float* B, float* C, int M, int K, int N, cudaStream_t stream){
     dim3 block(16,16);
     dim3 grid((N + block.x - 1) / block.x, (M + block.y - 1) / block.y);
 
 
-    matmul_kernel <<< grid, block >>>(A, B, C, M, K, N);
+    matmul_kernel <<< grid, block, 0, stream >>>(A, B, C, M, K, N);
 
 }

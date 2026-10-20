@@ -88,10 +88,10 @@ void attention_softmax_kernel(const float* scores, float* weights, int seq_len){
 
 
 
-void cuda_attention_softmax(const float* scores, float* weights, int seq_len){
+void cuda_attention_softmax(const float* scores, float* weights, int seq_len, cudaStream_t stream){
     const int block_size = 256;
     const std::size_t shared_bytes = block_size * sizeof(float);
 
 
-    attention_softmax_kernel <<< seq_len, block_size, shared_bytes >>> (scores, weights, seq_len);
+    attention_softmax_kernel <<< seq_len, block_size, shared_bytes, stream >>> (scores, weights, seq_len);
 }

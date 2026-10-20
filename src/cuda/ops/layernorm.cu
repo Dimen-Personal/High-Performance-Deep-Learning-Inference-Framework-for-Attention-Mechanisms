@@ -73,9 +73,9 @@ void layer_norm_kernel(const float * input, const float* gamma, const float* bet
 }
 
 
-void cuda_layer_norm(const float* input, const float * gamma, const float* beta, float* output, int size, float epsilon){
+void cuda_layer_norm(const float* input, const float * gamma, const float* beta, float* output, int size, float epsilon, cudaStream_t stream){
     const int block_size = 256;
     const std::size_t shared_bytes = block_size * sizeof(float);
 
-    layer_norm_kernel <<< 1, block_size, shared_bytes >>> (input, gamma, beta, output, size, epsilon);
+    layer_norm_kernel <<< 1, block_size, shared_bytes, stream >>> (input, gamma, beta, output, size, epsilon);
 }

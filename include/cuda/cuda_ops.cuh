@@ -12,14 +12,16 @@ void cuda_vector_add(
 void cuda_gelu(
     const float* input,
     float* output,
-    int size
+    int size,
+    cudaStream_t stream = nullptr    // 这里nullptr 相当于默认的stream
 );
 
 
 void cuda_softmax(
     const float* input,
     float* output,
-    int size
+    int size,
+    cudaStream_t stream = nullptr
 );
 
 void cuda_layer_norm(
@@ -28,7 +30,8 @@ void cuda_layer_norm(
     const float* beta,
     float* output,
     int size,
-    float epsilon
+    float epsilon,
+    cudaStream_t stream = nullptr
 );
 
 
@@ -38,7 +41,8 @@ void cuda_matmul(
     float* C,
     int M,
     int K,
-    int N
+    int N,
+    cudaStream_t stream = nullptr
 );
 
 
@@ -47,14 +51,16 @@ void cuda_attention_scores(
     const float* K,
     float* scores,
     int seq_len,
-    int head_dim
+    int head_dim,
+    cudaStream_t stream = nullptr
 );
 
 
 void cuda_attention_softmax(
     const float* scores,
     float* weights,
-    int seq_len
+    int seq_len,
+    cudaStream_t stream = nullptr
 );
 
 // Second version of the cuda_attention_softmax
@@ -67,7 +73,8 @@ void cuda_attention_softmax_multiblock(
     float* row_max,
     float* row_sum,
     int seq_len,
-    int blocks_per_row    // Decide use how many blocks to deal with a row.
+    int blocks_per_row,    // Decide use how many blocks to deal with a row.
+    cudaStream_t stream = nullptr
 );
 
 #endif

@@ -68,9 +68,9 @@ void softmax_kernel(const float* input, float* output, int size){
 
 
 
-void cuda_softmax(const float* input, float* output, int size){
+void cuda_softmax(const float* input, float* output, int size, cudaStream_t stream){
     const int block_size = 256;
     const std::size_t shared_bytes = block_size * sizeof(float);
 
-    softmax_kernel <<< 1, block_size, shared_bytes >>> (input, output, size);
+    softmax_kernel <<< 1, block_size, shared_bytes, stream >>> (input, output, size);
 }

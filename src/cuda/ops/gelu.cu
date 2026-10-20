@@ -16,10 +16,10 @@ __global__ void gelu_kernel(const float* input, float* output, int size){
 }
 
 
-void cuda_gelu(const float* input, float* output, int size){
+void cuda_gelu(const float* input, float* output, int size, cudaStream_t stream){
     const int block_size = 256;
     const int grid_size = (size + block_size - 1) / block_size;
 
-    gelu_kernel<<< grid_size, block_size >>>(input, output, size);
+    gelu_kernel<<< grid_size, block_size, 0, stream >>>(input, output, size);    // Reprsents 0 shared bytes and stream.
 
 }

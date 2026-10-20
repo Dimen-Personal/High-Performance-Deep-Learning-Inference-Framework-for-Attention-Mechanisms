@@ -232,14 +232,15 @@ void cuda_attention_softmax_multiblock(
     float* row_max,
     float* row_sum,
     int seq_len,
-    int blocks_per_row
+    int blocks_per_row,
+    cudaStream_t stream
 ){
     const int block_size = 256; 
     const std::size_t shared_bytes = block_size * sizeof(float);
     const int partial_grid = seq_len * blocks_per_row;
 
     // Partial Max
-    attention_softmax_partial_max_kernel <<< partial_grid, block_size, shared_bytes >>>(
+    attention_softmax_partial_max_kernel <<< partial_grid, block_size, shared_bytes, stream >>>(
         scores,
         partial_max,
         seq_len, 
@@ -248,7 +249,7 @@ void cuda_attention_softmax_multiblock(
 
 
     // Final maximum of each row
-    attention_softmax_row_max_kernel <<< seq_len, block_size, shared_bytes >>>(
+    attention_softmax_row_max_kernel <<< seq_len, block_size, shared_bytes, stream >>>(
         partial_max, 
         row_max,
         seq_len,
@@ -258,7 +259,7 @@ void cuda_attention_softmax_multiblock(
 
 
     // Exp + partial sum
-    attention_softmax_exp_sum_kernel <<< partial_grid, block_size, shared_bytes >>>(
+    attention_softmax_exp_sum_kernel <<< partial_grid, block_size, shared_bytes, stream >>>(
         scores,
         weights,
         row_max,
@@ -270,7 +271,7 @@ void cuda_attention_softmax_multiblock(
 
 
     // complete row sum
-    attention_softmax_row_sum_kernel <<< seq_len, block_size, shared_bytes >>>(
+    attention_softmax_row_sum_kernel <<< seq_len, block_size, shared_bytes, stream >>>(
         partial_sum,
         row_sum,
         seq_len,
@@ -281,7 +282,7 @@ void cuda_attention_softmax_multiblock(
 
 
     // Normalize
-    attention_softmax_normalize_kernel <<< partial_grid, block_size >>>(
+    attention_softmax_normalize_kernel <<< partial_grid, block_size, 0, stream >>>(
         weights,
         row_sum,
         seq_len,
