@@ -757,7 +757,7 @@ add_executable(
 
     # Operator Registry
     src/ops/operator_registry.cpp
-    src/ops/register_operators.cpp
+    #src/ops/register_operators.cpp
 
     # CPU Polymorphic Operators
     src/ops/cpu/gelu_operator.cpp
