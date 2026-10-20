@@ -153,6 +153,7 @@ void Executor::run(const Graph& graph){
 
 
 
+/*
 OperatorRegistry& Executor::operator_registry(){
     return operator_registry_;
 }
@@ -160,6 +161,9 @@ OperatorRegistry& Executor::operator_registry(){
 const OperatorRegistry& Executor::operator_registry() const{
     return operator_registry_;
 }
+
+
+*/
 
 
 
@@ -210,7 +214,8 @@ void Executor::execute_node(const Node& node){
     
 
     // Create operator
-    std::unique_ptr<Operator> op = operator_registry_.create(node.type(), device);
+    //std::unique_ptr<Operator> op = operator_registry_.create(node.type(), device);
+    auto op = OperatorRegistry::instance().create(node.type(), device);
 
 
     // Execute

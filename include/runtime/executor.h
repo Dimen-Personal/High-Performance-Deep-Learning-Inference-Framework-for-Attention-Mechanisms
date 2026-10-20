@@ -31,15 +31,15 @@ class Executor{
         std::size_t memory_capacity_count() const;
 
         // Public access for inner tool
-        OperatorRegistry& operator_registry();
-        const OperatorRegistry& operator_registry() const;
+        //OperatorRegistry& operator_registry();
+        //const OperatorRegistry& operator_registry() const;
 
 
     private:
         std::unordered_map<std::string, Tensor> tensors_;
         std::unordered_map<std::string, std::vector<int>> tensor_shapes_;
         std::unordered_map<std::string, DeviceType> tensor_devices_;
-        OperatorRegistry operator_registry_;
+        //OperatorRegistry operator_registry_;
         
 
         void execute_node(const Node& node);
@@ -59,5 +59,6 @@ class Executor{
         void execute_attention_scores(const Node& node);
         */
 };      
+
 
 #endif
