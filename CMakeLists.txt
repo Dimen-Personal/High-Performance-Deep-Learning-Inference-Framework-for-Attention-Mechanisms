@@ -6,7 +6,9 @@ project(
     LANGUAGES CXX CUDA
 )
 
- 
+# since cuda_ops.h is cpp file, so now we need to let cpp know where can find cudatoolkit.
+find_package(CUDAToolkit REQUIRED)
+
 
 set(CMAKE_CXX_STANDARD 17)          # using C++ 17 standard  == g++ -std=c++17
 set(CMAKE_CXX_STANDARD_REQUIRED ON) # Necessary C++ 17
@@ -717,6 +719,13 @@ target_include_directories(
     cuda_backend
     PUBLIC         # PUBLIC  PRIVATE   INTERFACE  规定了谁会使用这些头文件
     ${CMAKE_SOURCE_DIR}/include 
+)
+
+
+target_link_libraries(
+    cuda_backend
+    PUBLIC
+    CUDA::cudart
 )
 
 set_property(
