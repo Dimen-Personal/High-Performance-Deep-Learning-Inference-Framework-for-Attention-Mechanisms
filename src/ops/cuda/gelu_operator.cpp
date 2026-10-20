@@ -7,7 +7,8 @@
 
 void CudaGeluOperator::execute(
     const std::vector<const Tensor*>& inputs,
-    const std::vector<Tensor*>& outputs
+    const std::vector<Tensor*>& outputs,
+     const ExecutionContext& context
 )const
 {
     if(inputs.size() != 1 || outputs.size() != 1)
@@ -27,7 +28,7 @@ void CudaGeluOperator::execute(
 
 
 
-    cuda_gelu(input->data(), output->data(), static_cast<int>(input -> size()));
+    cuda_gelu(input->data(), output->data(), static_cast<int>(input -> size()), static_cast<cudaStream_t>(context.stream));
 }
 
 

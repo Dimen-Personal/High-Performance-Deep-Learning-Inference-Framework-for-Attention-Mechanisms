@@ -1,6 +1,8 @@
 #ifndef CUDA_OPS_CUH
 #define CUDA_OPS_CUH
 
+#include <cuda_runtime.h>
+
 void cuda_vector_add(
     const float* A,
     const float* B,

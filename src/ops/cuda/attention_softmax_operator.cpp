@@ -7,7 +7,8 @@
 
 void CudaAttentionSoftmaxOperator::execute(
     const std::vector<const Tensor*>& inputs,
-    const std::vector<Tensor*>& outputs
+    const std::vector<Tensor*>& outputs,
+     const ExecutionContext& context
 ) const
 {
  
@@ -56,7 +57,8 @@ void CudaAttentionSoftmaxOperator::execute(
     cuda_attention_softmax(
         input->data(),
         output->data(),
-        seq_len
+        seq_len,
+        static_cast<cudaStream_t>(context.stream)
     );
 }
 

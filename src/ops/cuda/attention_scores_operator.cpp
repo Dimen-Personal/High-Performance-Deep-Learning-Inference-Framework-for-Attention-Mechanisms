@@ -7,7 +7,8 @@
 
 void CudaAttentionScoresOperator::execute(
     const std::vector<const Tensor*>& inputs,
-    const std::vector<Tensor*>& outputs
+    const std::vector<Tensor*>& outputs,
+    const ExecutionContext& context
 ) const
 {
     if(inputs.size() != 2 || outputs.size() != 1)
@@ -69,7 +70,8 @@ void CudaAttentionScoresOperator::execute(
         K->data(),
         scores->data(),
         seq_len,
-        head_dim
+        head_dim,
+        static_cast<cudaStream_t>(context.stream)
     );
 }
 

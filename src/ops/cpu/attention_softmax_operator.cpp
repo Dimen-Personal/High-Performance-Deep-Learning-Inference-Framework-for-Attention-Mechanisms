@@ -7,7 +7,8 @@
 
 void CpuAttentionSoftmaxOperator::execute(
     const std::vector<const Tensor*>& inputs,
-    const std::vector<Tensor*>& outputs
+    const std::vector<Tensor*>& outputs,
+    const ExecutionContext&    
 ) const
 {
  

@@ -219,7 +219,9 @@ void Executor::execute_node(const Node& node){
 
 
     // Execute
-    op -> execute(inputs, outputs);
+    // Temporary context for path verification
+    ExecutionContext context;
+    op -> execute(inputs, outputs, context);
     
     
     

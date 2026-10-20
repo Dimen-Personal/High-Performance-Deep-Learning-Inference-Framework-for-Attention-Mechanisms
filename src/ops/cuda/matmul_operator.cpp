@@ -6,7 +6,8 @@
 
 void CudaMatmulOperator::execute(
     const std::vector<const Tensor*>& inputs,
-    const std::vector<Tensor*>& outputs
+    const std::vector<Tensor*>& outputs,
+     const ExecutionContext& context
 ) const{
         // 1. Safety check and boundary validation.
     // Validate input/output
@@ -58,7 +59,7 @@ void CudaMatmulOperator::execute(
         throw std::runtime_error("Matmul Output Shape Mismatch.");
 
 
-    cuda_matmul(A -> data(), B -> data(), C -> data(), M, K, N);
+    cuda_matmul(A -> data(), B -> data(), C -> data(), M, K, N, static_cast<cudaStream_t>(context.stream));
 }
 
 

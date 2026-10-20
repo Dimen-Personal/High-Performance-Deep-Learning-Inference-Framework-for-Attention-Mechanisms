@@ -7,7 +7,8 @@
 
 void CudaLayerNormOperator::execute(
     const std::vector<const Tensor*>& inputs,
-    const std::vector<Tensor*>& outputs
+    const std::vector<Tensor*>& outputs,
+     const ExecutionContext& context
 ) const
 {
     if(inputs.size() != 3 || outputs.size() != 1)
@@ -37,7 +38,7 @@ void CudaLayerNormOperator::execute(
 
 
 
-    cuda_layer_norm(input->data(), gamma->data(), beta->data(), output->data(), static_cast<int>(input->size()), epsilon);
+    cuda_layer_norm(input->data(), gamma->data(), beta->data(), output->data(), static_cast<int>(input->size()), epsilon, static_cast<cudaStream_t>(context.stream));
 
 }
 

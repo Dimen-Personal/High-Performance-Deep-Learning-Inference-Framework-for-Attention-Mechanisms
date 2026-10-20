@@ -8,7 +8,8 @@ class CudaMatmulOperator final : public CudaOperator{
 
         void execute(
             const std::vector<const Tensor*>& inputs,
-            const std::vector<Tensor*>& outputs
+            const std::vector<Tensor*>& outputs,
+             const ExecutionContext& context
         ) const override;
 };
 

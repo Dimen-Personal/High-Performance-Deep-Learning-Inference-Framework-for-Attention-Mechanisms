@@ -7,7 +7,8 @@ class CpuGeluOperator final : public CpuOperator{   // final means this class ca
     public:
         void execute(
             const std::vector<const Tensor*>& inputs,
-            const std::vector<Tensor*>& outputs
+            const std::vector<Tensor*>& outputs,
+            const ExecutionContext&    
         ) const override;   // Override 保证函数签名和父类一致，进行double check. 
 };
 
