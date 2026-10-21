@@ -3,6 +3,38 @@
 #include "cuda/cuda_ops.cuh"
 #include <stdexcept>
 
+
+Executor::Executor(){
+    cudaError_t status = cudaStreamCreate(&stream_);   // Take address at here and write back the value to the private variable
+
+    if(status != cudaSuccess)
+        throw std::runtime_error(std::string("cudaStreamCreste failed: " + cudaErrorString(status)));
+}
+
+
+Executor::~Executor(){
+    if(stream_ != nullptr){
+        cudaStreamSynchronize(stream_);   // Make sure all assignments in this stream have been completed. Since we also have memorypool.
+
+        cudaStreamDestroy(stream_);
+
+        stream_ = nullptr;
+    }
+}
+
+
+// Used to replace cudaDeviceSynchronize(), only wait for this stream.
+void Executor::synchronize(){
+    cudaError_t status = cudaStreamSynchronize(stream_);
+
+    if(status != cudaSuccess)
+        throw std::runtime_error(std::string("cudaStreamSynchronize failed: ") + cudaGetErrorString(status));
+}
+
+
+
+
+
 void Executor::add_tensor(const Tensor& tensor){
     tensors_.insert_or_assign(tensor.name(), tensor);  // C++ dunction for hash map instance.
     tensor_shapes_.insert_or_assign(tensor.name(), tensor.shape());
@@ -219,8 +251,11 @@ void Executor::execute_node(const Node& node){
 
 
     // Execute
-    // Temporary context for path verification
+    // Put executor's stream into context for pass
     ExecutionContext context;
+
+    context.stream = static_cast<void*>(stream_);
+
     op -> execute(inputs, outputs, context);
     
     

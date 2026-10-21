@@ -12,10 +12,22 @@
 
 #include <string>
 #include <unordered_map>
+#include <cuda_runtime.h>
 
 class Executor{
     
     public:
+
+        Executor();
+        ~Executor();
+
+        Executor(const Executor&) = delete;    // Forbid copy constructor.
+
+        Executor& operator =(const Executor&) = delete;  // forbid copy assignment.
+
+
+        void synchronize();
+
 
         void add_tensor(const Tensor& tensor);
         void register_tensor(const std::string& name, const std::vector<int>& shape, DeviceType device = DeviceType::CPU);
