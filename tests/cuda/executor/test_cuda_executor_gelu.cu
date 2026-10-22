@@ -83,7 +83,7 @@ int main(){
     executor.run(graph);
 
 
-
+    executor.synchronize();
 
 
     // Obtain CUDA output tensor
@@ -100,7 +100,7 @@ int main(){
 
     // D2H
     Tensor host_output("host_output", shape);
-    copy_device_to_host(device_output, host_output);
+    copy_device_to_host(device_output, host_output);    // 原来default stream的时候是在这里同步的，现在我们自己创立了stream，因此不能依赖隐形的保障关系
 
 
 

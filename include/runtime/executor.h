@@ -52,6 +52,7 @@ class Executor{
         std::unordered_map<std::string, std::vector<int>> tensor_shapes_;
         std::unordered_map<std::string, DeviceType> tensor_devices_;
         //OperatorRegistry operator_registry_;
+        cudaStream_t stream_ = nullptr;
         
 
         void execute_node(const Node& node);

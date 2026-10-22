@@ -8,7 +8,7 @@ Executor::Executor(){
     cudaError_t status = cudaStreamCreate(&stream_);   // Take address at here and write back the value to the private variable
 
     if(status != cudaSuccess)
-        throw std::runtime_error(std::string("cudaStreamCreste failed: " + cudaErrorString(status)));
+        throw std::runtime_error(std::string("cudaStreamCreste failed: ") + cudaGetErrorString(status));
 }
 
 

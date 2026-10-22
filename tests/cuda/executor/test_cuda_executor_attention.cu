@@ -155,7 +155,8 @@ public:
     {
         // Ensure launched kernels have finished before
         // the external input pool is destroyed.
-        cudaDeviceSynchronize();   // 等待当前设备之前提交的CUDA工作全部完成
+        //cudaDeviceSynchronize();   // 等待当前设备之前提交的CUDA工作全部完成
+        executor.synchronize();
     }
 
     void add_input(const Tensor& host)
@@ -254,10 +255,13 @@ bool test_executor_matmul()
         "MatMul kernel launch"
     );
 
+    /*
     check_cuda(
         cudaDeviceSynchronize(),   // 保证GPU所有的线程也完成了
         "MatMul synchronization"
     );
+    */
+   context.executor.synchronize();
 
     Tensor actual("actual", {M, N});
 
@@ -345,10 +349,13 @@ bool test_executor_attention_scores()
         "AttentionScores kernel launch"
     );
 
+    /*
     check_cuda(
         cudaDeviceSynchronize(),
         "AttentionScores synchronization"
     );
+    */
+   context.executor.synchronize();
 
     Tensor actual(
         "actual",
@@ -429,10 +436,14 @@ bool test_executor_attention_softmax()
         "AttentionSoftmax kernel launch"
     );
 
+    /*
     check_cuda(
         cudaDeviceSynchronize(),
         "AttentionSoftmax synchronization"
     );
+    */
+    context.executor.synchronize();
+
 
     Tensor actual(
         "actual",
@@ -682,12 +693,17 @@ bool test_executor_attention_end_to_end()
         "End-to-End Attention kernel launch"
     );
 
-
+    
+    
+    /*
     // Wait for all CUDA kernels to finish.
     check_cuda(
         cudaDeviceSynchronize(),
         "End-to-End Attention synchronization"
     );
+    */
+    context.executor.synchronize();
+
 
 
     // ==================================================
