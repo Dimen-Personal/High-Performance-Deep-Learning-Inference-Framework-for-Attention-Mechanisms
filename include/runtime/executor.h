@@ -35,6 +35,8 @@ class Executor{
         Tensor& get_tensor(const std::string& name);
         const Tensor& get_tensor(const std::string& name) const;
 
+        cudaStream_t get_stream() const;
+
         void run(const Graph& graph);
 
 

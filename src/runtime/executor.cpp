@@ -23,6 +23,14 @@ Executor::~Executor(){
 }
 
 
+
+cudaStream_t Executor::get_stream() const{
+    return stream_;
+}
+
+
+
+
 // Used to replace cudaDeviceSynchronize(), only wait for this stream.
 void Executor::synchronize(){
     cudaError_t status = cudaStreamSynchronize(stream_);
