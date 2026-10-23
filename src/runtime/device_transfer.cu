@@ -42,5 +42,5 @@ void copy_device_to_host(const Tensor& device, Tensor& host, cudaStream_t stream
     cudaError_t status = cudaMemcpyAsync(host.data(), device.data(), device.size() * sizeof(float), cudaMemcpyDeviceToHost, stream);
 
     if(status != cudaSuccess)
-        throw std::runtime_error(std::string("D2H cudaMemcpy failed: ") + cudaGetErrorString(status));
+        throw std::runtime_error(std::string("D2H cudaMemcpyAsync failed: ") + cudaGetErrorString(status));
 }

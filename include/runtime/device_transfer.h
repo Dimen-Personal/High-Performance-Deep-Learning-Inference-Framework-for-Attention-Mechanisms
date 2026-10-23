@@ -2,6 +2,7 @@
 #define DEVICE_TRANSFER_H
 
 #include "tensor/tensor.h"
+#include <cuda_runtime.h>
 
 void copy_host_to_device(
     const Tensor& host,

@@ -880,3 +880,35 @@ set_property(
     TARGET cuda_attention_softmax_profile
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+
+# Pinned memory Pool test
+add_executable(
+    pinned_memory_pool_test
+
+    tests/cuda/test_pinned_memory_pool.cu
+
+    src/runtime/pinned_memory_pool.cu
+    src/runtime/cuda_memory_pool.cu
+)
+
+
+target_include_directories(
+    pinned_memory_pool_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(
+    pinned_memory_pool_test
+    PRIVATE
+    CUDA::cudart
+)
+
+
+set_property(
+    TARGET pinned_memory_pool_test
+    PROPERTY CUDA_ARCHITECTURES 70
+)

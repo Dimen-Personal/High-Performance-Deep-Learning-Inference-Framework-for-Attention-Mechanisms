@@ -48,7 +48,7 @@ int main(){
     Executor executor;
 
     // H2D Transfer
-    copy_host_to_device(host_input, device_input, executor.stream());
+    copy_host_to_device(host_input, device_input, executor.get_stream());
 
 
 
@@ -113,7 +113,7 @@ int main(){
     copy_device_to_host(
         device_output,
         host_output,
-        executor.stream()
+        executor.get_stream()
     );
 
 
