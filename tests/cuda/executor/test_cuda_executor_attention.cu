@@ -171,7 +171,7 @@ public:
             DeviceType::CUDA
         );
 
-        copy_host_to_device(host, device, executor.stream());
+        copy_host_to_device(host, device, executor.get_stream());
 
         executor.add_tensor(device);
     }
@@ -268,7 +268,7 @@ bool test_executor_matmul()
     copy_device_to_host(
         context.executor.get_tensor("C"),
         actual,
-        context.executor.stream()
+        context.executor.get_stream()
     );
 
     context.executor.synchronize();
@@ -460,7 +460,7 @@ bool test_executor_attention_softmax()
     copy_device_to_host(
         context.executor.get_tensor("weights"),
         actual,
-        context.executor.get_stream();
+        context.executor.get_stream()
     );
 
     context.executor.synchronize();
@@ -744,7 +744,7 @@ bool test_executor_attention_end_to_end()
     copy_device_to_host(
         device_output,
         actual,
-        context.executor.get_stream();
+        context.executor.get_stream()
     );
 
 
