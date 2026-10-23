@@ -43,7 +43,7 @@ void pinned_pool_basic()
                 << "Pinned memory access failed"
                 << std::endl;
 
-            return 1;
+            return ;
         }
     }
 
@@ -58,7 +58,7 @@ void pinned_pool_basic()
         << std::endl;
 
 
-    return 0;
+     
 }
 
 
@@ -139,7 +139,7 @@ void pinned_pool_transfer()
                 << "Async copy mismatch"
                 << std::endl;
 
-            return 1;
+            return ;
         }
     }
 
@@ -167,7 +167,7 @@ void pinned_pool_transfer()
         << std::endl;
 
 
-    return 0;
+    
 }
 
 

@@ -34,7 +34,7 @@ class PinnedMemoryPool{
     private:
 
         std::vector<PinnedMemoryBlock> blocks_;
-}
+};
 
 
 #endif
