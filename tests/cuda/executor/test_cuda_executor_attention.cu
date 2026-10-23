@@ -171,7 +171,7 @@ public:
             DeviceType::CUDA
         );
 
-        copy_host_to_device(host, device);
+        copy_host_to_device(host, device, executor.stream());
 
         executor.add_tensor(device);
     }
@@ -261,14 +261,17 @@ bool test_executor_matmul()
         "MatMul synchronization"
     );
     */
-   context.executor.synchronize();
+   
 
     Tensor actual("actual", {M, N});
 
     copy_device_to_host(
         context.executor.get_tensor("C"),
-        actual
+        actual,
+        context.executor.stream()
     );
+
+    context.executor.synchronize();
 
     return compare_tensors(actual, expected);
 }
@@ -355,7 +358,7 @@ bool test_executor_attention_scores()
         "AttentionScores synchronization"
     );
     */
-   context.executor.synchronize();
+   
 
     Tensor actual(
         "actual",
@@ -364,8 +367,12 @@ bool test_executor_attention_scores()
 
     copy_device_to_host(
         context.executor.get_tensor("scores"),
-        actual
+        actual,
+        context.executor.get_stream()
     );
+
+
+    context.executor.synchronize();
 
     return compare_tensors(actual, expected);
 }
@@ -442,7 +449,7 @@ bool test_executor_attention_softmax()
         "AttentionSoftmax synchronization"
     );
     */
-    context.executor.synchronize();
+    
 
 
     Tensor actual(
@@ -452,8 +459,11 @@ bool test_executor_attention_softmax()
 
     copy_device_to_host(
         context.executor.get_tensor("weights"),
-        actual
+        actual,
+        context.executor.get_stream();
     );
+
+    context.executor.synchronize();
 
     if(!compare_tensors(actual, expected))
     {
@@ -702,7 +712,7 @@ bool test_executor_attention_end_to_end()
         "End-to-End Attention synchronization"
     );
     */
-    context.executor.synchronize();
+   
 
 
 
@@ -733,9 +743,12 @@ bool test_executor_attention_end_to_end()
 
     copy_device_to_host(
         device_output,
-        actual
+        actual,
+        context.executor.get_stream();
     );
 
+
+     context.executor.synchronize();
 
     // ==================================================
     // Step 10: Compare CPU and CUDA outputs.

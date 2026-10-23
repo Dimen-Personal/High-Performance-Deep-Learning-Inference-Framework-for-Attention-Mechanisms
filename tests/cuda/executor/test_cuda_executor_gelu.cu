@@ -45,10 +45,10 @@ int main(){
 
     Tensor device_input("input_gpu", shape, input_device_buffer, DeviceType::CUDA);
 
-
+    Executor executor;
 
     // H2D Transfer
-    copy_host_to_device(host_input, device_input);
+    copy_host_to_device(host_input, device_input, executor.stream());
 
 
 
@@ -71,13 +71,13 @@ int main(){
 
 
     // Configure Executor.
-    Executor executor;
+    
 
     executor.add_tensor(device_input);
     executor.register_tensor("output_gpu", shape, DeviceType::CUDA);
 
 
-
+/*
 
     // Run Graph
     executor.run(graph);
@@ -101,6 +101,23 @@ int main(){
     // D2H
     Tensor host_output("host_output", shape);
     copy_device_to_host(device_output, host_output);    // 原来default stream的时候是在这里同步的，现在我们自己创立了stream，因此不能依赖隐形的保障关系
+
+
+*/
+
+    executor.run(graph);
+
+    Tensor& device_output = executor.get_tensor("output_gpu");
+    Tensor host_output("host_output", shape);
+
+    copy_device_to_host(
+        device_output,
+        host_output,
+        executor.stream()
+    );
+
+
+    executor.synchronize();
 
 
 
