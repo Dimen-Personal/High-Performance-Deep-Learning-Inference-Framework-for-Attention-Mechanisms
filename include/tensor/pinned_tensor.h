@@ -46,6 +46,14 @@ class PinnedTensor{
         std::string name_;
         std::vector<int> shape_;
         std::size_t size_ = 0; 
+        float* data_ = nullptr;
+        PinnedMemoryPool* pool_ = nullptr;
 
 
-}
+};
+
+
+#endif
+
+
+
