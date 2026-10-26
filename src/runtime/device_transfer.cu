@@ -48,9 +48,9 @@ void copy_device_to_host(const Tensor& device, Tensor& host, cudaStream_t stream
 
 
 // PinnedTensor overload
+// PinnedTensor must be an CPU memory therefore, there is no need to have device check and also pinnedtensor doesn't provide device type.
 void copy_host_to_device(const PinnedTensor& host, Tensor& device, cudaStream_t stream){
-    if(host.device() != DeviceType::CPU)
-        throw std::runtime_error("Source tensor must be on CPU");
+    
 
     if(device.device() != DeviceType::CUDA)
         throw std::runtime_error("Destination tensor must be on GPU");
@@ -72,9 +72,7 @@ void copy_host_to_device(const PinnedTensor& host, Tensor& device, cudaStream_t 
 void copy_device_to_host(const Tensor& device, PinnedTensor& host, cudaStream_t stream){
     if(device.device() != DeviceType::CUDA)
         throw std::runtime_error("Source tensor must be on GPU");
-
-    if(host.device() != DeviceType::CPU)
-        throw std::runtime_error("Destination tensor must be on CPU");
+ 
 
 
     if(host.shape() != device.shape())
