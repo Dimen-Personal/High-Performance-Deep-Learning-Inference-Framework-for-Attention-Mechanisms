@@ -912,3 +912,62 @@ set_property(
     TARGET pinned_memory_pool_test
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+
+# cuda_executor_gelu_pinned_test
+add_executable(
+    cuda_executor_gelu_pinned_test
+
+    tests/cuda/executor/test_cuda_executor_gelu_pinned.cu
+
+    # Tensor
+    src/tensor/tensor.cpp
+    src/tensor/pinned_tensor.cpp
+
+    # Graph
+    src/graph/node.cpp
+    src/graph/graph.cpp
+
+    # Runtime
+    src/runtime/executor.cpp
+    src/runtime/memory_pool.cpp
+    src/runtime/memory_planner.cpp
+    src/runtime/cuda_memory_pool.cu
+    src/runtime/pinned_memory_pool.cu
+    src/runtime/device_transfer.cu
+
+    # CPU GELU reference
+    src/ops/attention/gelu.cpp
+
+    # Operator registry
+    src/ops/operator_registry.cpp
+
+    # Polymorphic operators
+    src/ops/cpu/gelu_operator.cpp
+    src/ops/cuda/gelu_operator.cpp
+
+    # CUDA GELU kernel
+    src/cuda/ops/gelu.cu
+)
+
+
+target_include_directories(
+    cuda_executor_gelu_pinned_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(
+    cuda_executor_gelu_pinned_test
+    PRIVATE
+    CUDA::cudart
+)
+
+
+set_property(
+    TARGET cuda_executor_gelu_pinned_test
+    PROPERTY CUDA_ARCHITECTURES 70
+)
