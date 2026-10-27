@@ -12,43 +12,30 @@
 #include <cuda_runtime.h>
 
 #include <chrono>
-#include <cmath>
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 
-// CUDA error checking
-void check_cuda(
-    cudaError_t status,
-    const char* operation
-){
-    if(status != cudaSuccess)
-        throw std::runtime_error(
-            std::string(operation) + ": " + cudaGetErrorString(status)
-        );
-}
-
-
+// 注意现在multi stream的运用是在提升多个attention运行的时候的吞吐量，比如在运算第一个copy的时候可以开始第二个的allocation。
 
 // ==================================================
 // One complete Attention inference pipeline.
 //
 // Each instance owns:
 //
-// Pinned Q/K/V/output
-// CUDA Q/K/V
+// Pinned Q / K / V / Output
+// CUDA Q / K / V
 // Executor
-// CUDA stream
-// Attention graph
-//
-// Therefore:
+// CUDA Stream
+// Attention Graph
 //
 // Pipeline A -> Stream A
 // Pipeline B -> Stream B
-//
 // ==================================================
 
 class AttentionPipeline
@@ -103,6 +90,8 @@ public:
     }
 
 
+    // Disable copying because this class owns
+    // CUDA resources and an Executor.
     AttentionPipeline(
         const AttentionPipeline&
     ) = delete;
@@ -115,38 +104,60 @@ public:
 
     ~AttentionPipeline()
     {
-        // Make sure the stream no longer uses
-        // external CUDA input buffers.
+        // Make sure no CUDA work is still using
+        // the external device input buffers.
         executor_.synchronize();
 
 
-        q_device_pool_.release(
-            q_device_ptr_
-        );
+        if(q_device_ptr_ != nullptr)
+        {
+            q_device_pool_.release(
+                q_device_ptr_
+            );
+
+            q_device_ptr_ = nullptr;
+        }
 
 
-        k_device_pool_.release(
-            k_device_ptr_
-        );
+        if(k_device_ptr_ != nullptr)
+        {
+            k_device_pool_.release(
+                k_device_ptr_
+            );
+
+            k_device_ptr_ = nullptr;
+        }
 
 
-        v_device_pool_.release(
-            v_device_ptr_
-        );
+        if(v_device_ptr_ != nullptr)
+        {
+            v_device_pool_.release(
+                v_device_ptr_
+            );
+
+            v_device_ptr_ = nullptr;
+        }
     }
 
 
     // ==================================================
-    // Submit:
+    // Submit one full inference request.
     //
-    // Q H2D
-    // K H2D
-    // V H2D
+    // Same stream:
+    //
+    // H2D Q
+    // H2D K
+    // H2D V
+    //     ↓
     // AttentionScores
+    //     ↓
     // AttentionSoftmax
+    //     ↓
     // MatMul
-    // Output D2H
+    //     ↓
+    // D2H Output
     //
+    // IMPORTANT:
     // No synchronization here.
     // ==================================================
 
@@ -154,21 +165,21 @@ public:
     {
         copy_host_to_device(
             q_host_,
-            q_device_,
+            *q_device_,
             executor_.get_stream()
         );
 
 
         copy_host_to_device(
             k_host_,
-            k_device_,
+            *k_device_,
             executor_.get_stream()
         );
 
 
         copy_host_to_device(
             v_host_,
-            v_device_,
+            *v_device_,
             executor_.get_stream()
         );
 
@@ -212,44 +223,69 @@ public:
 
 private:
 
+    // ==================================================
+    // Shape
+    // ==================================================
+
     int seq_len_;
+
     int head_dim_;
 
 
     // ==================================================
-    // Host pinned memory
+    // Pinned Host Memory
+    //
+    // Pool must be declared BEFORE PinnedTensor objects
+    // because PinnedTensor uses this pool.
     // ==================================================
 
     PinnedMemoryPool pinned_pool_;
 
 
     PinnedTensor q_host_;
+
     PinnedTensor k_host_;
+
     PinnedTensor v_host_;
 
     PinnedTensor output_host_;
 
 
     // ==================================================
-    // CUDA input memory
+    // CUDA Input Memory Pools
     // ==================================================
 
     CudaMemoryPool q_device_pool_;
+
     CudaMemoryPool k_device_pool_;
+
     CudaMemoryPool v_device_pool_;
 
 
+    // ==================================================
+    // Raw CUDA Input Pointers
+    // ==================================================
+
     float* q_device_ptr_ = nullptr;
+
     float* k_device_ptr_ = nullptr;
+
     float* v_device_ptr_ = nullptr;
 
 
-    // These Tensor objects do not own memory.
-    Tensor q_device_;
+    // ==================================================
+    // Device Tensor wrappers
+    //
+    // Tensor has no default constructor,
+    // so use unique_ptr and construct them after
+    // CUDA memory has been allocated.
+    // ==================================================
 
-    Tensor k_device_;
+    std::unique_ptr<Tensor> q_device_;
 
-    Tensor v_device_;
+    std::unique_ptr<Tensor> k_device_;
+
+    std::unique_ptr<Tensor> v_device_;
 
 
     // ==================================================
@@ -262,7 +298,7 @@ private:
 
 
     // ==================================================
-    // Host data initialization
+    // Initialize pinned host input data.
     // ==================================================
 
     void initialize_host_data(
@@ -314,7 +350,7 @@ private:
 
 
     // ==================================================
-    // Allocate GPU Q/K/V.
+    // Allocate CUDA Q / K / V.
     // ==================================================
 
     void allocate_device_inputs()
@@ -338,27 +374,36 @@ private:
 
 
         q_device_ =
-            Tensor(
+            std::make_unique<Tensor>(
                 "Q",
-                {seq_len_, head_dim_},
+                std::vector<int>{
+                    seq_len_,
+                    head_dim_
+                },
                 q_device_ptr_,
                 DeviceType::CUDA
             );
 
 
         k_device_ =
-            Tensor(
+            std::make_unique<Tensor>(
                 "K",
-                {seq_len_, head_dim_},
+                std::vector<int>{
+                    seq_len_,
+                    head_dim_
+                },
                 k_device_ptr_,
                 DeviceType::CUDA
             );
 
 
         v_device_ =
-            Tensor(
+            std::make_unique<Tensor>(
                 "V",
-                {seq_len_, head_dim_},
+                std::vector<int>{
+                    seq_len_,
+                    head_dim_
+                },
                 v_device_ptr_,
                 DeviceType::CUDA
             );
@@ -366,21 +411,23 @@ private:
 
 
     // ==================================================
-    // Build:
+    // Build Attention Graph:
     //
-    // Q,K
-    //  ↓
-    // AttentionScores
-    //  ↓
-    // scores
-    //  ↓
-    // AttentionSoftmax
-    //  ↓
-    // weights
-    //  ↓
-    // MatMul(weights,V)
-    //  ↓
-    // output
+    // Q -----\
+    //         AttentionScores
+    // K -----/
+    //              ↓
+    //           scores
+    //              ↓
+    //      AttentionSoftmax
+    //              ↓
+    //           weights
+    //              ↓
+    // weights -----\
+    //               MatMul
+    // V -----------/
+    //              ↓
+    //            output
     //
     // ==================================================
 
@@ -421,23 +468,23 @@ private:
 
 
     // ==================================================
-    // Configure Executor.
+    // Register tensors with Executor.
     // ==================================================
 
     void configure_executor()
     {
         executor_.add_tensor(
-            q_device_
+            *q_device_
         );
 
 
         executor_.add_tensor(
-            k_device_
+            *k_device_
         );
 
 
         executor_.add_tensor(
-            v_device_
+            *v_device_
         );
 
 
@@ -465,7 +512,13 @@ private:
 
 
 // ==================================================
-// Warmup
+// Serial Warmup
+//
+// A:
+// H2D -> Attention -> D2H -> synchronize
+//
+// B:
+// H2D -> Attention -> D2H -> synchronize
 // ==================================================
 
 void warmup_serial(
@@ -488,6 +541,18 @@ void warmup_serial(
 }
 
 
+// ==================================================
+// Multi-stream Warmup
+//
+// Submit both requests before waiting.
+//
+// Stream A:
+// H2D A -> Attention A -> D2H A
+//
+// Stream B:
+// H2D B -> Attention B -> D2H B
+// ==================================================
+
 void warmup_multistream(
     AttentionPipeline& a,
     AttentionPipeline& b,
@@ -496,7 +561,6 @@ void warmup_multistream(
 {
     for(int i = 0; i < runs; i++)
     {
-        // Submit both before waiting.
         a.submit();
 
         b.submit();
@@ -512,16 +576,11 @@ void warmup_multistream(
 // ==================================================
 // Serial benchmark.
 //
-// Request A:
+// Measures the total end-to-end time
+// required to finish TWO requests.
 //
-// H2D -> Attention -> D2H -> wait
-//
-// then:
-//
-// Request B:
-//
-// H2D -> Attention -> D2H -> wait
-//
+// Request A completely finishes first,
+// then Request B starts.
 // ==================================================
 
 double benchmark_serial(
@@ -540,11 +599,13 @@ double benchmark_serial(
 
     for(int i = 0; i < runs; i++)
     {
+        // Request A
         a.submit();
 
         a.synchronize();
 
 
+        // Request B
         b.submit();
 
         b.synchronize();
@@ -564,23 +625,28 @@ double benchmark_serial(
         ).count();
 
 
-    return elapsed_ms / runs;
+    return elapsed_ms
+        /
+        static_cast<double>(
+            runs
+        );
 }
 
 
 // ==================================================
 // Multi-stream benchmark.
 //
-// Submit:
+// Measures total time required to finish
+// TWO requests.
 //
-// Stream A:
-// H2D A -> Attention A -> D2H A
+// Both requests are submitted before either
+// one is synchronized.
 //
-// Stream B:
-// H2D B -> Attention B -> D2H B
+// CUDA may overlap:
+// - copy and compute
+// - kernels from independent streams
 //
-// Then wait.
-//
+// depending on available GPU resources.
 // ==================================================
 
 double benchmark_multistream(
@@ -599,14 +665,16 @@ double benchmark_multistream(
 
     for(int i = 0; i < runs; i++)
     {
-        // IMPORTANT:
-        // submit both before synchronization.
-
+        // Submit complete pipeline A.
         a.submit();
 
+
+        // Immediately submit complete pipeline B.
         b.submit();
 
 
+        // Only wait after both streams
+        // already contain their work.
         a.synchronize();
 
         b.synchronize();
@@ -626,12 +694,16 @@ double benchmark_multistream(
         ).count();
 
 
-    return elapsed_ms / runs;
+    return elapsed_ms
+        /
+        static_cast<double>(
+            runs
+        );
 }
 
 
 // ==================================================
-// Benchmark one problem size.
+// Run one problem size.
 // ==================================================
 
 void run_benchmark(
@@ -641,6 +713,8 @@ void run_benchmark(
     int benchmark_runs
 )
 {
+    // Different seeds guarantee that the two
+    // requests contain different input values.
     AttentionPipeline pipeline_a(
         seq_len,
         head_dim,
@@ -655,7 +729,11 @@ void run_benchmark(
     );
 
 
-    // Verify that we really have two streams.
+    // ==================================================
+    // Sanity check:
+    // Two Executors must have two different streams.
+    // ==================================================
+
     if(
         pipeline_a.stream()
         ==
@@ -663,14 +741,15 @@ void run_benchmark(
     )
     {
         throw std::runtime_error(
-            "Two Attention pipelines share the same CUDA stream"
+            "Two Attention pipelines unexpectedly "
+            "share the same CUDA stream"
         );
     }
 
 
-    // ------------------------------
+    // ==================================================
     // Warmup
-    // ------------------------------
+    // ==================================================
 
     warmup_serial(
         pipeline_a,
@@ -686,9 +765,9 @@ void run_benchmark(
     );
 
 
-    // ------------------------------
-    // Benchmark serial.
-    // ------------------------------
+    // ==================================================
+    // Serial
+    // ==================================================
 
     const double serial_ms =
         benchmark_serial(
@@ -698,9 +777,9 @@ void run_benchmark(
         );
 
 
-    // ------------------------------
-    // Benchmark multi-stream.
-    // ------------------------------
+    // ==================================================
+    // Multi-stream
+    // ==================================================
 
     const double multistream_ms =
         benchmark_multistream(
@@ -710,18 +789,32 @@ void run_benchmark(
         );
 
 
+    // ==================================================
+    // Speedup
+    //
+    // > 1.0 = multi-stream faster
+    // = 1.0 = approximately equal
+    // < 1.0 = multi-stream slower
+    // ==================================================
+
     const double speedup =
         serial_ms
         /
         multistream_ms;
 
 
-    // Total latency is for TWO requests.
+    // ==================================================
+    // Throughput
     //
-    // Therefore requests per second:
+    // Each benchmark iteration processes
+    // TWO requests.
     //
-    // 2 requests / iteration.
-    // ------------------------------
+    // serial_ms is milliseconds / 2 requests.
+    //
+    // Requests / second:
+    //
+    // 2 * 1000 / milliseconds
+    // ==================================================
 
     const double serial_requests_per_second =
         2000.0
@@ -735,8 +828,13 @@ void run_benchmark(
         multistream_ms;
 
 
+    // ==================================================
+    // Print one row.
+    // ==================================================
+
     std::cout
         << std::left
+
         << std::setw(10)
         << seq_len
 
@@ -772,10 +870,16 @@ int main()
 {
     try
     {
+        // Standard transformer-like head dimension.
         constexpr int head_dim =
             64;
 
 
+        // Warmup avoids measuring:
+        //
+        // first CUDA context initialization,
+        // initial allocations,
+        // one-time runtime overhead.
         constexpr int warmup_runs =
             3;
 
@@ -795,7 +899,9 @@ int main()
 
 
         std::cout
-            << "\nEnd-to-End Attention Multi-stream Benchmark\n"
+            << "\n"
+            << "End-to-End Attention Multi-stream Benchmark"
+            << "\n"
             << std::endl;
 
 
@@ -834,7 +940,10 @@ int main()
             << std::endl;
 
 
-        for(int seq_len : sequence_lengths)
+        for(
+            int seq_len :
+            sequence_lengths
+        )
         {
             run_benchmark(
                 seq_len,
