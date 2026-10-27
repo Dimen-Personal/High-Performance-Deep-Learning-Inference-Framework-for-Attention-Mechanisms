@@ -1186,3 +1186,34 @@ set_property(
     TARGET cuda_executor_attention_multistream_profile
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+
+ 
+# MatMul Block Configuration Benchmark
+add_executable(
+    cuda_matmul_block_config_benchmark
+
+    benchmark/cuda/benchmark_matmul_block_config.cu
+)
+
+
+target_include_directories(
+    cuda_matmul_block_config_benchmark
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(
+    cuda_matmul_block_config_benchmark
+    PRIVATE
+    CUDA::cudart
+)
+
+
+set_property(
+    TARGET cuda_matmul_block_config_benchmark
+    PROPERTY CUDA_ARCHITECTURES 70
+)
