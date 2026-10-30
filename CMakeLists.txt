@@ -1284,3 +1284,29 @@ set_property(
     TARGET cuda_attention_softmax_block_config_benchmark
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+
+
+
+
+# ============================================================
+# CPU MatMul OpenMP Scaling Benchmark
+# ============================================================
+
+find_package(OpenMP REQUIRED)
+
+
+add_executable(
+    cpu_matmul_core_scaling_benchmark
+
+    benchmark/cpu/benchmark_matmul_core_scaling.cpp
+)
+
+
+target_link_libraries(
+    cpu_matmul_core_scaling_benchmark
+    PRIVATE
+    OpenMP::OpenMP_CXX
+)
