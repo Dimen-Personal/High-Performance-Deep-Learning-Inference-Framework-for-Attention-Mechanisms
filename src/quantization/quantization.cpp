@@ -104,7 +104,7 @@ void quantize_fp32_to_int8(
 
 
 
-// Helper function fp32 -> quantized int 8 tensor
+// Helper function 
 QuantizedTensor quantize_fp32_to_int8(
     const float* data,
     std::size_t size

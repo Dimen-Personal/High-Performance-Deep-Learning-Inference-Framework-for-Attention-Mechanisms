@@ -58,7 +58,7 @@ void dequantize_int8_to_fp32(
     const int8_t* input,
     float* output,
     std::size_t size,
-    const QuantizationParams params
+    const QuantizationParams& params
 );
 
 

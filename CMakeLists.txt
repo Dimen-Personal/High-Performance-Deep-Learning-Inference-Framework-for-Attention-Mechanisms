@@ -1310,3 +1310,25 @@ target_link_libraries(
     PRIVATE
     OpenMP::OpenMP_CXX
 )
+
+
+
+
+
+ 
+# INT8 Quantization Test
+# ============================================================
+
+add_executable(
+    cpu_quantization_test
+
+    tests/cpu/quantization_test.cpp
+    src/quantization/quantization.cpp
+)
+
+
+target_include_directories(
+    cpu_quantization_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
