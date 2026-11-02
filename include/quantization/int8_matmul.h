@@ -19,3 +19,18 @@ void int8_matmul(
     const QuantizationParams& params_A,
     const QuantizationParams& params_B
 );
+
+
+
+
+void int8_matmul_openmp(
+    const int8_t* A,
+    const int8_t* B,
+    float* C,
+    int M,
+    int K,
+    int N,
+    const QuantizationParams& params_A,
+    const QuantizationParams& params_B,
+    int thread_count
+);

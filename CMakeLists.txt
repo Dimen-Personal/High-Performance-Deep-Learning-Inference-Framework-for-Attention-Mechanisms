@@ -1383,3 +1383,38 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+
+
+
+
+# ============================================================
+# INT8 MatMul OpenMP Scaling Benchmark
+# ============================================================
+
+find_package(OpenMP REQUIRED)
+
+
+add_executable(
+    cpu_int8_matmul_scaling_benchmark
+
+    benchmark/cpu/int8_matmul_scaling.cpp
+
+    src/quantization/quantization.cpp
+
+    src/quantization/int8_matmul.cpp
+)
+
+
+target_include_directories(
+    cpu_int8_matmul_scaling_benchmark
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(
+    cpu_int8_matmul_scaling_benchmark
+    PRIVATE
+    OpenMP::OpenMP_CXX
+)
