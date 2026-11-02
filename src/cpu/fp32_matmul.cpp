@@ -45,11 +45,11 @@ void fp32_matmul_openmp(
 
     for(int i = 0; i < M; i++)
         for(int j = 0; j < N; j++){
-            int32_t sum = 0;
+            float sum = 0;
 
             for(int k = 0; k < K; k++){
-                const int32_t a = static_cast<int32_t>(A[i * K + k]);
-                const int32_t b = static_cast<int32_t>(B[k * N + j]);
+                const float a = A[i * K + k];
+                const float b = B[k * N + j];
 
                 sum += a * b;
             }
