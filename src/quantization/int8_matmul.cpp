@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <stdexcept>
 
+
 void int8_matmul(
     const int8_t* A,
     const int8_t* B,
@@ -34,8 +35,34 @@ void int8_matmul(
 
 
 
+
+
+
+    const float output_scale = params_A.scale * params_B.scale;
+
+    for(int i = 0; i < M; i++)
+        for(int j = 0; j < N; j++){
+            int32_t accumulator = 0;
+
+            for(int k = 0; k < K; k++){
+                const int32_t a = static_cast<int32_t>(A[i * K + k]) - params_A.zero_point;
+                const int32_t b = static_cast<int32_t>(B[k * N + j]) - params_B.zero_point;
+
+                accumulator += a * b;
+            }
+
+
+            C[i * N + j] = static_cast<float>(accumulator) * output_scale;
+        }
+
+
+
+
+
+
+
     
-    
+
     
 
 }

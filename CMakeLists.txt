@@ -1332,3 +1332,29 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+
+
+
+
+
+# ============================================================
+# INT8 MatMul Correctness Test
+# ============================================================
+
+add_executable(
+    cpu_int8_matmul_test
+
+    tests/cpu/int8_matmul_test.cpp
+
+    src/quantization/quantization.cpp
+
+    src/quantization/int8_matmul.cpp
+)
+
+
+target_include_directories(
+    cpu_int8_matmul_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
