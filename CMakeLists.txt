@@ -1418,3 +1418,44 @@ target_link_libraries(
     PRIVATE
     OpenMP::OpenMP_CXX
 )
+
+
+
+
+
+
+
+# ============================================================
+# CPU FP32 / INT8 MatMul Dispatch Test
+# ============================================================
+
+find_package(OpenMP REQUIRED)
+
+
+add_executable(
+    cpu_matmul_dispatch_test
+
+    tests/cpu/cpu_matmul_dispatch_test.cpp
+
+    src/cpu/fp32_matmul.cpp
+
+    src/cpu/cpu_matmul_dispatch.cpp
+
+    src/quantization/quantization.cpp
+
+    src/quantization/int8_matmul.cpp
+)
+
+
+target_include_directories(
+    cpu_matmul_dispatch_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(
+    cpu_matmul_dispatch_test
+    PRIVATE
+    OpenMP::OpenMP_CXX
+)
