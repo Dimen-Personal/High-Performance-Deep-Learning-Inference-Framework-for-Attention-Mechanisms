@@ -1358,3 +1358,28 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+
+
+
+
+# ============================================================
+# FP32 vs INT8 MatMul Benchmark
+# ============================================================
+
+add_executable(
+    cpu_int8_matmul_benchmark
+
+    benchmark/cpu/benchmark_int8_matmul.cpp
+
+    src/quantization/quantization.cpp
+
+    src/quantization/int8_matmul.cpp
+)
+
+
+target_include_directories(
+    cpu_int8_matmul_benchmark
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
