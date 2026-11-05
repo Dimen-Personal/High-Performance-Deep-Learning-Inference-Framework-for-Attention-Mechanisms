@@ -25,7 +25,7 @@ void flash_attention_naive_kernel(
     // This template version still stores onr row on the shared memory instead N * N matrix in HBM
     extern __shared__ float shared[];
     float* scores = shared;
-    float* reduction = socres + seq_len;
+    float* reduction = scores + seq_len;
 
 
 
@@ -41,7 +41,7 @@ void flash_attention_naive_kernel(
         float score = 0.0f;
 
         for(int d = 0; d < head_dim; d++)
-            scores += Q[query_row * head_dim + d] * K[key_col * head_dim + d];
+            score += Q[query_row * head_dim + d] * K[key_col * head_dim + d];
         
         scores[key_col] = score * scale;
     }
@@ -61,7 +61,7 @@ void flash_attention_naive_kernel(
 
     reduction[tid] = local_max;
 
-    __synthreads();
+    __syncthreads();
 
 
     for(int stride = blockDim.x / 2; stride > 0; stride /= 2){
@@ -69,7 +69,7 @@ void flash_attention_naive_kernel(
         if(tid < stride)
             reduction[tid] = fmaxf(reduction[tid], reduction[tid + stride]);
 
-        __synthreads();
+        __syncthreads();
     }
 
 
@@ -92,14 +92,14 @@ void flash_attention_naive_kernel(
 
     reduction[tid] = local_sum;
 
-    __synthreads();
+    __syncthreads();
 
     for(int stride = blockDim.x / 2; stride > 0; stride /= 2){
         if(tid < stride)
             reduction[tid] += reduction[tid + stride];
 
 
-        __synthreads();
+        __syncthreads();
     }
 
 
@@ -107,7 +107,7 @@ void flash_attention_naive_kernel(
     const float row_sum = reduction[0];
 
 
-    __synthreads();
+    __syncthreads();
 
 
 
