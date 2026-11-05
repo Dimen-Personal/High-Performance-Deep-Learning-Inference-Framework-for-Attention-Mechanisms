@@ -134,7 +134,7 @@ void flash_attention_naive_kernel(
 
 
 // Host wrapper (still O (N) storage)
-void cuda_flash_atention(
+void cuda_flash_attention(
     const float* Q,
     const float* K,
     const float* V,
