@@ -33,3 +33,17 @@ void cuda_flash_attention(
     int head_dim,
     cudaStream_t stream = nullptr
 );
+
+
+
+
+
+void cuda_flash_attention_tiled(
+    const float* Q,
+    const float* K,
+    const float* V,
+    float* output,
+    int seq_len,
+    int head_dim,
+    cudaStream_t stream = nullptr
+);
