@@ -92,7 +92,7 @@ void flash_attention_tiled_kernel(
     float output_accumulator = 0.0f;
 
 
-    const float scale = rsqrft(static_cast<float>(head_dim));
+    const float scale = rsqrtf(static_cast<float>(head_dim));
 
 
 
@@ -189,7 +189,7 @@ void flash_attention_tiled_kernel(
             else 
                 rescale_alpha = expf(old_max - new_max);
 
-            onlne_max = new_max;
+            online_max = new_max;
         }
 
         __syncthreads();
@@ -264,7 +264,7 @@ void flash_attention_tiled_kernel(
                 tile_output += scores[local_key] * V_tile[local_key * head_dim + tid];
 
             
-            output_accumulator = rescale * output_accumulator + tile_output;
+            output_accumulator = rescale_alpha * output_accumulator + tile_output;
             
         }
 
@@ -312,7 +312,7 @@ void cuda_flash_attention_tiled(
         throw std::invalid_argument("Flash Attention dimensions must be positive.");
 
     if(head_dim > BLOCK_SIZE)
-        throw std::invalid_argument("Cuurrent tiled flash attention requires head_dim <= 128.")
+        throw std::invalid_argument("Cuurrent tiled flash attention requires head_dim <= 128.");
 
 
 
