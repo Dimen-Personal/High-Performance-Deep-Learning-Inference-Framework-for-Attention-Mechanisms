@@ -1363,6 +1363,7 @@ target_include_directories(
 
 
 
+
 # ============================================================
 # FP32 vs INT8 MatMul Benchmark
 # ============================================================
@@ -1383,6 +1384,7 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
 
 
 
@@ -1463,6 +1465,8 @@ target_link_libraries(
 
 
 
+
+
 # ============================================================
 # Flash Attention Correctness Test
 # ============================================================
@@ -1498,5 +1502,49 @@ target_link_libraries(
 
 set_property(
     TARGET flash_attention_correctness_test
+    PROPERTY CUDA_ARCHITECTURES 70
+)
+
+
+
+
+
+
+
+# ============================================================
+# Tiled Flash Attention Correctness Test
+# ============================================================
+
+add_executable(
+    flash_attention_tiled_correctness_test
+
+    tests/cuda/test_flash_attention_tiled_correctness.cu
+
+    # Baseline
+    src/cuda/ops/attention_scores.cu
+    src/cuda/ops/attention_softmax.cu
+    src/cuda/ops/matmul.cu
+
+    # Tiled Flash Attention
+    src/cuda/ops/flash_attention_tiled.cu
+)
+
+
+target_include_directories(
+    flash_attention_tiled_correctness_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(
+    flash_attention_tiled_correctness_test
+    PRIVATE
+    CUDA::cudart
+)
+
+
+set_property(
+    TARGET flash_attention_tiled_correctness_test
     PROPERTY CUDA_ARCHITECTURES 70
 )

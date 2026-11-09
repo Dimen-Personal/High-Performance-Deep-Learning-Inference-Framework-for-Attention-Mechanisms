@@ -184,7 +184,7 @@ void flash_attention_tiled_kernel(
             const float new_max = fmaxf(old_max, tile_max);
 
 
-            if(online_sum = 0.0f)
+            if(online_sum == 0.0f)
                 rescale_alpha = 0.0f;
             else 
                 rescale_alpha = expf(old_max - new_max);
@@ -326,7 +326,7 @@ void cuda_flash_attention_tiled(
     const std::size_t shared_bytes = shared_floats * sizeof(float);
 
 
-    flash_attention_tiled_kernel << seq_len, BLOCK_SIZE, shared_bytes, stream >>>(
+    flash_attention_tiled_kernel <<< seq_len, BLOCK_SIZE, shared_bytes, stream >>>(
         Q, K, V,
         output,
         seq_len,
