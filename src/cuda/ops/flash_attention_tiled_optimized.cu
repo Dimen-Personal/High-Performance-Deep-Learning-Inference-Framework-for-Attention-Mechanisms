@@ -288,6 +288,43 @@ void flash_attention_tiled_optimized_kernel(
 
 
 // Host Wrapper
+void cuda_flash_attention_tiled_optimized(
+    const float* Q,
+    const float* K,
+    const float* V,
+    float* output,
+    int seq_len,
+    int head_dim,
+    cudaStream_t stream
+){
+    if(Q == nullptr || K == nullptr || V == nullptr || output == nullptr)
+        throw std::invalid_argument("Optimized Flash Attention received null pointer.");
+
+
+    if(seq_len <= 0 || head_dim <= 0)
+        throw std::invalid_argument("Optimized Flash Attention dimensions must be positive.");
+
+
+    if(head_dim > BLOCK_SIZE)
+        throw std::invalid_argument("Optimized tiled flash attention currently requires head_dim <= 128.")
+
+
+    
+
+    // Dynamic shared mmory
+    const std::size_t shared_floats = static_cast<std::size_t>(2 * TILE_K * head_dim + TILE_K);
+    const std::size_t shared_bytes = shared_floats * sizeof(float);
+
+
+    flash_attention_tiled_optimized_kernel <<< seq_len, BLOCK_SIZE, shared_bytes, stream >>> (
+        Q, K, V,
+        output,
+        seq_len,
+        head_dim
+    );
+
+
+}
 
 
 
