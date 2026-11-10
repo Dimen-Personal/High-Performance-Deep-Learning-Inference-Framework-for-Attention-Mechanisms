@@ -3,8 +3,6 @@
 
 #include <cuda_runtime.h>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <iomanip>
 #include <iostream>
@@ -14,7 +12,7 @@
 
 
 // ============================================================
-// CUDA error helper
+// CUDA Error Helper
 // ============================================================
 
 #define CUDA_CHECK(call)                                                     \
@@ -26,14 +24,15 @@
         {                                                                    \
             throw std::runtime_error(                                        \
                 std::string("CUDA error: ")                                  \
-                + cudaGetErrorString(error)                                  \
+                +                                                            \
+                cudaGetErrorString(error)                                    \
             );                                                               \
         }                                                                    \
     } while(false)
 
 
 // ============================================================
-// Configuration
+// Benchmark Configuration
 // ============================================================
 
 constexpr int WARMUP_RUNS =
@@ -49,7 +48,7 @@ constexpr int HEAD_DIM =
 
 
 // ============================================================
-// Result
+// Benchmark Result
 // ============================================================
 
 struct BenchmarkResult
@@ -70,11 +69,23 @@ struct BenchmarkResult
         0.0f;
 
 
+    float optimized_tiled_ms =
+        0.0f;
+
+
     float naive_speedup =
         0.0f;
 
 
     float tiled_speedup =
+        0.0f;
+
+
+    float optimized_speedup =
+        0.0f;
+
+
+    float optimized_vs_original_tiled =
         0.0f;
 
 
@@ -92,7 +103,7 @@ struct BenchmarkResult
 
 
 // ============================================================
-// Deterministic initialization
+// Deterministic Input Initialization
 // ============================================================
 
 void initialize_input(
@@ -181,24 +192,20 @@ void launch_baseline_attention(
 
 
 // ============================================================
-// Benchmark baseline
+// Generic Benchmark Helper
+//
+// launch_function must launch one complete attention path.
 // ============================================================
 
-float benchmark_baseline(
-    const float* Q,
-    const float* K,
-    const float* V,
-    float* scores,
-    float* weights,
-    float* output,
-    int seq_len,
-    int head_dim,
+template<typename LaunchFunction>
+float benchmark_kernel(
+    LaunchFunction launch_function,
     cudaStream_t stream
 )
 {
-    // --------------------------------------------------------
+    // ========================================================
     // Warmup
-    // --------------------------------------------------------
+    // ========================================================
 
     for(
         int i = 0;
@@ -206,17 +213,7 @@ float benchmark_baseline(
         i++
     )
     {
-        launch_baseline_attention(
-            Q,
-            K,
-            V,
-            scores,
-            weights,
-            output,
-            seq_len,
-            head_dim,
-            stream
-        );
+        launch_function();
     }
 
 
@@ -227,9 +224,14 @@ float benchmark_baseline(
     );
 
 
-    // --------------------------------------------------------
-    // Events
-    // --------------------------------------------------------
+    CUDA_CHECK(
+        cudaGetLastError()
+    );
+
+
+    // ========================================================
+    // CUDA Events
+    // ========================================================
 
     cudaEvent_t start;
 
@@ -258,23 +260,17 @@ float benchmark_baseline(
     );
 
 
+    // ========================================================
+    // Benchmark Runs
+    // ========================================================
+
     for(
         int i = 0;
         i < BENCHMARK_RUNS;
         i++
     )
     {
-        launch_baseline_attention(
-            Q,
-            K,
-            V,
-            scores,
-            weights,
-            output,
-            seq_len,
-            head_dim,
-            stream
-        );
+        launch_function();
     }
 
 
@@ -335,293 +331,17 @@ float benchmark_baseline(
 
 
 // ============================================================
-// Benchmark naive fused
-// ============================================================
-
-float benchmark_naive_fused(
-    const float* Q,
-    const float* K,
-    const float* V,
-    float* output,
-    int seq_len,
-    int head_dim,
-    cudaStream_t stream
-)
-{
-    for(
-        int i = 0;
-        i < WARMUP_RUNS;
-        i++
-    )
-    {
-        cuda_flash_attention(
-            Q,
-            K,
-            V,
-            output,
-            seq_len,
-            head_dim,
-            stream
-        );
-    }
-
-
-    CUDA_CHECK(
-        cudaStreamSynchronize(
-            stream
-        )
-    );
-
-
-    cudaEvent_t start;
-
-    cudaEvent_t stop;
-
-
-    CUDA_CHECK(
-        cudaEventCreate(
-            &start
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventCreate(
-            &stop
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventRecord(
-            start,
-            stream
-        )
-    );
-
-
-    for(
-        int i = 0;
-        i < BENCHMARK_RUNS;
-        i++
-    )
-    {
-        cuda_flash_attention(
-            Q,
-            K,
-            V,
-            output,
-            seq_len,
-            head_dim,
-            stream
-        );
-    }
-
-
-    CUDA_CHECK(
-        cudaEventRecord(
-            stop,
-            stream
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventSynchronize(
-            stop
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaGetLastError()
-    );
-
-
-    float total_ms =
-        0.0f;
-
-
-    CUDA_CHECK(
-        cudaEventElapsedTime(
-            &total_ms,
-            start,
-            stop
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventDestroy(
-            start
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventDestroy(
-            stop
-        )
-    );
-
-
-    return
-        total_ms
-        /
-        static_cast<float>(
-            BENCHMARK_RUNS
-        );
-}
-
-
-// ============================================================
-// Benchmark tiled Flash Attention
-// ============================================================
-
-float benchmark_tiled_flash(
-    const float* Q,
-    const float* K,
-    const float* V,
-    float* output,
-    int seq_len,
-    int head_dim,
-    cudaStream_t stream
-)
-{
-    for(
-        int i = 0;
-        i < WARMUP_RUNS;
-        i++
-    )
-    {
-        cuda_flash_attention_tiled(
-            Q,
-            K,
-            V,
-            output,
-            seq_len,
-            head_dim,
-            stream
-        );
-    }
-
-
-    CUDA_CHECK(
-        cudaStreamSynchronize(
-            stream
-        )
-    );
-
-
-    cudaEvent_t start;
-
-    cudaEvent_t stop;
-
-
-    CUDA_CHECK(
-        cudaEventCreate(
-            &start
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventCreate(
-            &stop
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventRecord(
-            start,
-            stream
-        )
-    );
-
-
-    for(
-        int i = 0;
-        i < BENCHMARK_RUNS;
-        i++
-    )
-    {
-        cuda_flash_attention_tiled(
-            Q,
-            K,
-            V,
-            output,
-            seq_len,
-            head_dim,
-            stream
-        );
-    }
-
-
-    CUDA_CHECK(
-        cudaEventRecord(
-            stop,
-            stream
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventSynchronize(
-            stop
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaGetLastError()
-    );
-
-
-    float total_ms =
-        0.0f;
-
-
-    CUDA_CHECK(
-        cudaEventElapsedTime(
-            &total_ms,
-            start,
-            stop
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventDestroy(
-            start
-        )
-    );
-
-
-    CUDA_CHECK(
-        cudaEventDestroy(
-            stop
-        )
-    );
-
-
-    return
-        total_ms
-        /
-        static_cast<float>(
-            BENCHMARK_RUNS
-        );
-}
-
-
-// ============================================================
-// Run one sequence length
+// Run Benchmark for One Sequence Length
 // ============================================================
 
 BenchmarkResult run_sequence_length(
     int seq_len
 )
 {
+    // ========================================================
+    // Tensor Sizes
+    // ========================================================
+
     const std::size_t qkv_elements =
         static_cast<std::size_t>(
             seq_len
@@ -639,7 +359,7 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // Host input
+    // Host Input
     // ========================================================
 
     std::vector<float> h_Q(
@@ -676,7 +396,7 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // Device buffers
+    // Device Buffers
     // ========================================================
 
     float* d_Q =
@@ -763,6 +483,10 @@ BenchmarkResult run_sequence_length(
     );
 
 
+    // ========================================================
+    // H2D
+    // ========================================================
+
     CUDA_CHECK(
         cudaMemcpy(
             d_Q,
@@ -814,56 +538,106 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // Benchmark
+    // 1. Baseline
     // ========================================================
 
     const float baseline_ms =
-        benchmark_baseline(
-            d_Q,
-            d_K,
-            d_V,
-            d_scores,
-            d_weights,
-            d_output,
-            seq_len,
-            HEAD_DIM,
-            stream
-        );
-
-
-    const float naive_fused_ms =
-        benchmark_naive_fused(
-            d_Q,
-            d_K,
-            d_V,
-            d_output,
-            seq_len,
-            HEAD_DIM,
-            stream
-        );
-
-
-    const float tiled_flash_ms =
-        benchmark_tiled_flash(
-            d_Q,
-            d_K,
-            d_V,
-            d_output,
-            seq_len,
-            HEAD_DIM,
+        benchmark_kernel(
+            [&]()
+            {
+                launch_baseline_attention(
+                    d_Q,
+                    d_K,
+                    d_V,
+                    d_scores,
+                    d_weights,
+                    d_output,
+                    seq_len,
+                    HEAD_DIM,
+                    stream
+                );
+            },
             stream
         );
 
 
     // ========================================================
-    // Memory analysis
+    // 2. Naive Fused
+    // ========================================================
+
+    const float naive_fused_ms =
+        benchmark_kernel(
+            [&]()
+            {
+                cuda_flash_attention(
+                    d_Q,
+                    d_K,
+                    d_V,
+                    d_output,
+                    seq_len,
+                    HEAD_DIM,
+                    stream
+                );
+            },
+            stream
+        );
+
+
+    // ========================================================
+    // 3. Original Tiled Flash Attention
+    // ========================================================
+
+    const float tiled_flash_ms =
+        benchmark_kernel(
+            [&]()
+            {
+                cuda_flash_attention_tiled(
+                    d_Q,
+                    d_K,
+                    d_V,
+                    d_output,
+                    seq_len,
+                    HEAD_DIM,
+                    stream
+                );
+            },
+            stream
+        );
+
+
+    // ========================================================
+    // 4. Warp-Optimized Tiled Flash Attention
+    // ========================================================
+
+    const float optimized_tiled_ms =
+        benchmark_kernel(
+            [&]()
+            {
+                cuda_flash_attention_tiled_optimized(
+                    d_Q,
+                    d_K,
+                    d_V,
+                    d_output,
+                    seq_len,
+                    HEAD_DIM,
+                    stream
+                );
+            },
+            stream
+        );
+
+
+    // ========================================================
+    // Memory Analysis
     //
-    // Standard Attention temporary allocation:
+    // Standard Attention:
     //
     // scores  = N × N floats
     // weights = N × N floats
     //
-    // total = 2 × N² × sizeof(float)
+    // temporary memory:
+    //
+    // 2 × N² × sizeof(float)
     // ========================================================
 
     const double temporary_bytes =
@@ -877,13 +651,15 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // Minimum algorithmic intermediate traffic:
+    // Minimum intermediate materialization traffic
     //
     // scores:
-    //     write + read
+    //     write
+    //     read
     //
     // weights:
-    //     write + read
+    //     write
+    //     read
     //
     // = 4 × N² floats
     // ========================================================
@@ -899,27 +675,24 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // Current baseline kernel logical intermediate traffic:
+    // Current baseline logical intermediate traffic
     //
     // scores:
     //     write
     //     read
     //
-    // softmax weights:
+    // softmax:
     //     write exp
     //     read for normalization
-    //     write normalized value
+    //     write normalized weights
     //
-    // final MatMul:
+    // matmul:
     //     read weights
     //
-    // = 6 × N² floats
-    //
-    // This is logical traffic, not guaranteed physical DRAM
-    // transactions because caches may absorb some accesses.
+    // = 6 × N² float accesses
     // ========================================================
 
-    const double current_baseline_traffic_bytes =
+    const double baseline_logical_traffic_bytes =
         6.0
         *
         static_cast<double>(
@@ -928,6 +701,10 @@ BenchmarkResult run_sequence_length(
         *
         sizeof(float);
 
+
+    // ========================================================
+    // Build Result
+    // ========================================================
 
     BenchmarkResult result;
 
@@ -948,6 +725,20 @@ BenchmarkResult run_sequence_length(
         tiled_flash_ms;
 
 
+    result.optimized_tiled_ms =
+        optimized_tiled_ms;
+
+
+    // ========================================================
+    // Speedup relative to baseline
+    //
+    // > 1:
+    //     faster than baseline
+    //
+    // < 1:
+    //     slower than baseline
+    // ========================================================
+
     result.naive_speedup =
         baseline_ms
         /
@@ -958,6 +749,27 @@ BenchmarkResult run_sequence_length(
         baseline_ms
         /
         tiled_flash_ms;
+
+
+    result.optimized_speedup =
+        baseline_ms
+        /
+        optimized_tiled_ms;
+
+
+    // ========================================================
+    // Direct optimization benefit
+    //
+    // Original Tiled / Optimized Tiled
+    //
+    // > 1:
+    //     optimized implementation is faster
+    // ========================================================
+
+    result.optimized_vs_original_tiled =
+        tiled_flash_ms
+        /
+        optimized_tiled_ms;
 
 
     result.temporary_memory_mb =
@@ -981,7 +793,7 @@ BenchmarkResult run_sequence_length(
 
 
     result.current_baseline_logical_traffic_mb =
-        current_baseline_traffic_bytes
+        baseline_logical_traffic_bytes
         /
         (
             1024.0
@@ -1048,10 +860,10 @@ BenchmarkResult run_sequence_length(
 
 
 // ============================================================
-// Print performance
+// Print Latency Results
 // ============================================================
 
-void print_performance_results(
+void print_latency_results(
     const std::vector<BenchmarkResult>& results
 )
 {
@@ -1066,27 +878,102 @@ void print_performance_results(
         << std::setw(10)
         << "SeqLen"
 
-        << std::setw(18)
-        << "Baseline(ms)"
-
-        << std::setw(18)
-        << "NaiveFused(ms)"
-
-        << std::setw(18)
-        << "TiledFlash(ms)"
+        << std::setw(16)
+        << "Baseline"
 
         << std::setw(16)
-        << "NaiveSpeedup"
+        << "Naive"
 
         << std::setw(16)
-        << "FlashSpeedup"
+        << "Tiled"
+
+        << std::setw(16)
+        << "Optimized"
 
         << std::endl;
 
 
     std::cout
         << std::string(
-            96,
+            74,
+            '-'
+        )
+        << std::endl;
+
+
+    for(
+        const BenchmarkResult& result :
+        results
+    )
+    {
+        std::cout
+            << std::left
+
+            << std::setw(10)
+            << result.seq_len
+
+            << std::setw(16)
+            << std::fixed
+            << std::setprecision(6)
+            << result.baseline_ms
+
+            << std::setw(16)
+            << std::fixed
+            << std::setprecision(6)
+            << result.naive_fused_ms
+
+            << std::setw(16)
+            << std::fixed
+            << std::setprecision(6)
+            << result.tiled_flash_ms
+
+            << std::setw(16)
+            << std::fixed
+            << std::setprecision(6)
+            << result.optimized_tiled_ms
+
+            << std::endl;
+    }
+}
+
+
+// ============================================================
+// Print Speedup Results
+// ============================================================
+
+void print_speedup_results(
+    const std::vector<BenchmarkResult>& results
+)
+{
+    std::cout
+        << "\nSpeedup Results"
+        << std::endl;
+
+
+    std::cout
+        << std::left
+
+        << std::setw(10)
+        << "SeqLen"
+
+        << std::setw(18)
+        << "Naive/Base"
+
+        << std::setw(18)
+        << "Tiled/Base"
+
+        << std::setw(20)
+        << "Optimized/Base"
+
+        << std::setw(22)
+        << "Opt_vs_Tiled"
+
+        << std::endl;
+
+
+    std::cout
+        << std::string(
+            88,
             '-'
         )
         << std::endl;
@@ -1105,28 +992,23 @@ void print_performance_results(
 
             << std::setw(18)
             << std::fixed
-            << std::setprecision(6)
-            << result.baseline_ms
-
-            << std::setw(18)
-            << std::fixed
-            << std::setprecision(6)
-            << result.naive_fused_ms
-
-            << std::setw(18)
-            << std::fixed
-            << std::setprecision(6)
-            << result.tiled_flash_ms
-
-            << std::setw(16)
-            << std::fixed
             << std::setprecision(4)
             << result.naive_speedup
 
-            << std::setw(16)
+            << std::setw(18)
             << std::fixed
             << std::setprecision(4)
             << result.tiled_speedup
+
+            << std::setw(20)
+            << std::fixed
+            << std::setprecision(4)
+            << result.optimized_speedup
+
+            << std::setw(22)
+            << std::fixed
+            << std::setprecision(4)
+            << result.optimized_vs_original_tiled
 
             << std::endl;
     }
@@ -1134,7 +1016,7 @@ void print_performance_results(
 
 
 // ============================================================
-// Print memory results
+// Print Memory Results
 // ============================================================
 
 void print_memory_results(
@@ -1232,7 +1114,7 @@ int main()
 
 
         std::cout
-            << "Flash Attention Performance Benchmark"
+            << "Flash Attention Optimization Benchmark"
             << std::endl;
 
 
@@ -1260,8 +1142,37 @@ int main()
 
 
         std::cout
+            << "\nCompared Implementations:"
             << std::endl;
 
+
+        std::cout
+            << "1. Baseline Attention"
+            << std::endl;
+
+
+        std::cout
+            << "2. Naive Fused Attention"
+            << std::endl;
+
+
+        std::cout
+            << "3. Original Tiled Flash Attention"
+            << std::endl;
+
+
+        std::cout
+            << "4. Warp-Optimized Tiled Flash Attention"
+            << std::endl;
+
+
+        std::cout
+            << std::endl;
+
+
+        // ====================================================
+        // Run every sequence length
+        // ====================================================
 
         for(
             int seq_len :
@@ -1283,7 +1194,16 @@ int main()
         }
 
 
-        print_performance_results(
+        // ====================================================
+        // Print Results
+        // ====================================================
+
+        print_latency_results(
+            results
+        );
+
+
+        print_speedup_results(
             results
         );
 
@@ -1293,28 +1213,42 @@ int main()
         );
 
 
+        // ====================================================
+        // Notes
+        // ====================================================
+
         std::cout
             << "\nNotes:"
             << std::endl;
 
 
         std::cout
-            << "TempMemory = scores[N,N] + weights[N,N]"
+            << "Baseline ratios are calculated as BaselineTime / ImplementationTime."
             << std::endl;
 
 
         std::cout
-            << "MinTraffic = theoretical minimum intermediate materialization traffic"
+            << "A baseline ratio > 1.0 means the implementation is faster than baseline."
             << std::endl;
 
 
         std::cout
-            << "CurrentLogical = logical intermediate accesses in current baseline kernels"
+            << "Opt_vs_Tiled = OriginalTiledTime / OptimizedTiledTime."
             << std::endl;
 
 
         std::cout
-            << "Actual DRAM traffic may differ because of GPU caches."
+            << "Opt_vs_Tiled > 1.0 means the warp optimization improved tiled attention."
+            << std::endl;
+
+
+        std::cout
+            << "TempMemory refers to baseline scores[N,N] + weights[N,N]."
+            << std::endl;
+
+
+        std::cout
+            << "Actual DRAM traffic may differ because of GPU caching."
             << std::endl;
 
 

@@ -1556,25 +1556,39 @@ set_property(
 
 
 
-# ============================================================
-# Flash Attention Performance Benchmark
-# ============================================================
-
 add_executable(
     flash_attention_benchmark
 
     benchmark/cuda/benchmark_flash_attention.cu
 
-    # Standard Attention
+    # ========================================================
+    # Baseline Attention
+    # ========================================================
+
     src/cuda/ops/attention_scores.cu
     src/cuda/ops/attention_softmax.cu
     src/cuda/ops/matmul.cu
 
-    # Naive fused
+
+    # ========================================================
+    # Naive Fused Attention
+    # ========================================================
+
     src/cuda/ops/flash_attention.cu
 
-    # Tiled online-softmax
+
+    # ========================================================
+    # Original Tiled Flash Attention
+    # ========================================================
+
     src/cuda/ops/flash_attention_tiled.cu
+
+
+    # ========================================================
+    # Warp-Optimized Tiled Flash Attention
+    # ========================================================
+
+    src/cuda/ops/flash_attention_tiled_optimized.cu
 )
 
 

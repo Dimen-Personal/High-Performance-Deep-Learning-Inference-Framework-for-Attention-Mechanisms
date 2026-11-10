@@ -29,7 +29,7 @@ void flash_attention_tiled_optimized_kernel(
     const int query_row = blockIdx.x;
     const int tid = threadIdx.x;
 
-    if(query_row >= sew_len)
+    if(query_row >= seq_len)
         return;
 
     
@@ -62,7 +62,7 @@ void flash_attention_tiled_optimized_kernel(
     // Online softmax state
     __shared__ float online_max;
     __shared__ float online_sum;
-    __sahred__ float rescale_alpha;
+    __shared__ float rescale_alpha;
 
 
 
@@ -89,7 +89,7 @@ void flash_attention_tiled_optimized_kernel(
     // Same every output dimension will be taken by one thread
     // 当前维度上的累加和
     float output_accumulator = 0.0f;
-    const float_scale = rsqrft(static_cast<float>(head_dim));
+    const float scale = rsqrtf(static_cast<float>(head_dim));
 
 
 
@@ -100,7 +100,7 @@ void flash_attention_tiled_optimized_kernel(
     for(int tile_start = 0; tile_start <= query_row; tile_start += TILE_K){
         
         // Same valid keys
-        const int remaining = query_row - title_start + 1;
+        const int remaining = query_row - tile_start + 1;
         const int valid_keys = remaining < TILE_K ? remaining : TILE_K;
         const int tile_elements = valid_keys * head_dim;
 
@@ -163,7 +163,7 @@ void flash_attention_tiled_optimized_kernel(
             // Warp reduction
             // We can use warp-level communication at here, so we don't need to use stncthreads
             for(int offset = WARP_SIZE / 2; offset > 0; offset /= 2)
-                partial_sum += _shfl_down_sync(0xffffffff, partial_sum, offset); // 0xffffffff全是1 表示所有的lane都参与这次shuffle， 第二个表示要取什么值，第三个表示延后多少个lane去取
+                partial_sum += __shfl_down_sync(0xffffffff, partial_sum, offset); // 0xffffffff全是1 表示所有的lane都参与这次shuffle， 第二个表示要取什么值，第三个表示延后多少个lane去取
 
             
             // 合并完之后第一个thread的partial sum就是这个warp的总和
@@ -192,7 +192,7 @@ void flash_attention_tiled_optimized_kernel(
             // Max reduction
             for(int offset = WARP_SIZE / 2; offset = 0; offset /= 2){
                 
-                const float other = _shfl_down_sync(0xffffffff, max_vlue, offset);
+                const float other = __shfl_down_sync(0xffffffff, max_value, offset);
 
                 max_value = fmaxf(max_value, other);
             }
@@ -225,7 +225,7 @@ void flash_attention_tiled_optimized_kernel(
             if(lane < valid_keys){
                 beta = expf(scores[lane] - online_max);
 
-                socres[lane] = beta;
+                scores[lane] = beta;
             }
 
 
@@ -306,7 +306,7 @@ void cuda_flash_attention_tiled_optimized(
 
 
     if(head_dim > BLOCK_SIZE)
-        throw std::invalid_argument("Optimized tiled flash attention currently requires head_dim <= 128.")
+        throw std::invalid_argument("Optimized tiled flash attention currently requires head_dim <= 128.");
 
 
     
