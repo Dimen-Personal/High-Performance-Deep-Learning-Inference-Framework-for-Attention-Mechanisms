@@ -1548,3 +1548,51 @@ set_property(
     TARGET flash_attention_tiled_correctness_test
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+
+
+
+
+
+# ============================================================
+# Flash Attention Performance Benchmark
+# ============================================================
+
+add_executable(
+    flash_attention_benchmark
+
+    benchmark/cuda/benchmark_flash_attention.cu
+
+    # Standard Attention
+    src/cuda/ops/attention_scores.cu
+    src/cuda/ops/attention_softmax.cu
+    src/cuda/ops/matmul.cu
+
+    # Naive fused
+    src/cuda/ops/flash_attention.cu
+
+    # Tiled online-softmax
+    src/cuda/ops/flash_attention_tiled.cu
+)
+
+
+target_include_directories(
+    flash_attention_benchmark
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(
+    flash_attention_benchmark
+    PRIVATE
+    CUDA::cudart
+)
+
+
+set_property(
+    TARGET flash_attention_benchmark
+    PROPERTY CUDA_ARCHITECTURES 70
+)
