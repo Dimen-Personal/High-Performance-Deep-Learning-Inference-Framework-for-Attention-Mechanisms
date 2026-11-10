@@ -190,7 +190,7 @@ void flash_attention_tiled_optimized_kernel(
 
 
             // Max reduction
-            for(int offset = WARP_SIZE / 2; offset = 0; offset /= 2){
+            for(int offset = WARP_SIZE / 2; offset > 0; offset /= 2){
                 
                 const float other = __shfl_down_sync(0xffffffff, max_value, offset);
 

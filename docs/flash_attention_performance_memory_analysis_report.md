@@ -1,14 +1,33 @@
-# Flash Attention Performance & Memory Analysis Report
+# Warp-Optimized Flash Attention Benchmark Analysis
 
-## 1. Objective
+## 1. Benchmark Goal
 
-This benchmark compares three CUDA attention paths:
+This experiment evaluates whether the first optimization pass on the tiled Flash Attention kernel successfully improves GPU utilization.
 
-1. **Baseline Attention**: `AttentionScores -> AttentionSoftmax -> MatMul(weights, V)`
-2. **Naive Fused Attention**: one fused kernel, one full score row in shared memory
-3. **Tiled Flash Attention**: tiled K/V loading + online softmax
+Compared implementations:
 
-Configuration:
+1. **Baseline Attention**
+   - `AttentionScores`
+   - `AttentionSoftmax`
+   - `MatMul(weights, V)`
+
+2. **Naive Fused Attention**
+   - fuses the three logical attention stages
+   - avoids full `N × N` global intermediates
+   - stores one score row in shared memory
+
+3. **Original Tiled Flash Attention**
+   - K/V tiling
+   - online softmax
+   - fixed tile-sized shared-memory footprint
+
+4. **Warp-Optimized Tiled Flash Attention**
+   - caches Q
+   - one warp cooperatively computes one Q·K dot product
+   - warp shuffle reductions for QK / tile max / tile sum
+   - fewer block-wide synchronizations
+
+Benchmark configuration:
 
 ```text
 Head Dimension: 64
@@ -16,392 +35,482 @@ Warmup Runs: 10
 Benchmark Runs: 100
 ```
 
-Tested sequence lengths:
-
-```text
-128, 256, 512, 1024, 2048
-```
-
 ---
 
 ## 2. Raw Performance Results
 
-| SeqLen | Baseline (ms) | Naive Fused (ms) | Tiled Flash (ms) | Naive Speedup | Flash Speedup |
-|---:|---:|---:|---:|---:|---:|
-| 128 | 0.021955 | 0.039485 | 0.045875 | 0.5560× | 0.4786× |
-| 256 | 0.047626 | 0.077496 | 0.089948 | 0.6146× | 0.5295× |
-| 512 | 0.100106 | 0.181187 | 0.245883 | 0.5525× | 0.4071× |
-| 1024 | 0.316211 | 0.605706 | 0.715356 | 0.5221× | 0.4420× |
-| 2048 | 0.999916 | 1.910999 | 2.193050 | 0.5232× | 0.4559× |
-
-`Speedup = Baseline / Optimized`, so values below `1.0×` mean the optimized path is currently slower.
+| SeqLen | Baseline (ms) | Naive (ms) | Original Tiled (ms) | Optimized Tiled (ms) |
+|---:|---:|---:|---:|---:|
+| 128 | 0.022098 | 0.039844 | 0.046162 | 0.036782 |
+| 256 | 0.047933 | 0.078008 | 0.091105 | 0.070789 |
+| 512 | 0.100884 | 0.180675 | 0.245514 | 0.170373 |
+| 1024 | 0.300186 | 0.608225 | 0.713318 | 0.427571 |
+| 2048 | 0.995850 | 1.891523 | 2.192138 | 1.371023 |
 
 ---
 
-## 3. Intermediate Memory / Traffic
+## 3. Optimization Gain
 
-| SeqLen | Temp Memory (MB) | Min Intermediate Traffic (MB) | Current Baseline Logical Traffic (MB) |
-|---:|---:|---:|---:|
-| 128 | 0.1250 | 0.2500 | 0.3750 |
-| 256 | 0.5000 | 1.0000 | 1.5000 |
-| 512 | 2.0000 | 4.0000 | 6.0000 |
-| 1024 | 8.0000 | 16.0000 | 24.0000 |
-| 2048 | 32.0000 | 64.0000 | 96.0000 |
+| SeqLen | Opt vs Original Tiled | Tiled Latency Reduction | Optimized / Baseline | Still Slower Than Baseline |
+|---:|---:|---:|---:|---:|
+| 128 | 1.2550× | 20.32% | 0.6008× | 66.45% |
+| 256 | 1.2870× | 22.30% | 0.6771× | 47.68% |
+| 512 | 1.4410× | 30.61% | 0.5921× | 68.88% |
+| 1024 | 1.6683× | 40.06% | 0.7021× | 42.44% |
+| 2048 | 1.5989× | 37.46% | 0.7264× | 37.67% |
 
-The baseline materializes:
+The first optimization pass is clearly successful.
+
+The optimized tiled kernel is faster than the original tiled implementation at every tested sequence length.
+
+The improvement becomes stronger as sequence length grows:
 
 ```text
-scores[N,N] + weights[N,N]
+128  -> 1.255× faster
+256  -> 1.287× faster
+512  -> 1.441× faster
+1024 -> 1.668× faster
+2048 -> 1.599× faster
 ```
 
-so temporary global memory is `O(N^2)`.
-
-The fused paths eliminate these full `N x N` global intermediates.
+This strongly indicates that the original QK thread mapping and shared-memory reductions were real bottlenecks.
 
 ---
 
-## 4. Main Finding
+## 4. Why the Optimization Worked
 
-The result is split:
+The original tiled kernel used:
 
 ```text
-Memory goal: achieved
-Latency goal: not yet achieved
+1 thread
+-> computes one complete Q · K dot product
+-> loops serially through all 64 head dimensions
 ```
 
-The Flash-style implementation has already reduced intermediate global-memory complexity, but the current CUDA execution strategy is inefficient enough that it is still slower than the baseline.
+With:
+
+```text
+BLOCK_SIZE = 128
+TILE_K = 32
+head_dim = 64
+```
+
+only 32 threads actively computed attention scores, while many other threads were idle during that stage.
+
+The optimized version changed this to:
+
+```text
+1 warp
+-> computes one Q · K dot product cooperatively
+```
+
+For `head_dim = 64`, each lane processes approximately two dimensions, followed by a warp-level reduction.
+
+This improves:
+
+- thread utilization
+- instruction-level parallelism
+- QK reduction latency
+- synchronization overhead
+
+The optimized version also replaces several shared-memory reductions with warp shuffle operations.
+
+That is why performance improves substantially, especially at larger sequence lengths.
 
 ---
 
-## 5. Performance Interpretation
+## 5. Strongest Improvement Region
 
-### Naive Fused
-
-Approximate slowdown relative to baseline:
+The largest observed gain is at:
 
 ```text
-128  -> 1.80× slower
-256  -> 1.63× slower
-512  -> 1.81× slower
-1024 -> 1.92× slower
-2048 -> 1.91× slower
+seq_len = 1024
 ```
 
-So kernel fusion alone does not guarantee a speedup.
-
-### Tiled Flash
-
-Approximate slowdown relative to baseline:
+Original tiled:
 
 ```text
-128  -> 2.09× slower
-256  -> 1.89× slower
-512  -> 2.46× slower
-1024 -> 2.26× slower
-2048 -> 2.19× slower
+0.713318 ms
 ```
 
-The tiled path is also slower than the naive fused path at every tested sequence length.
-
----
-
-## 6. Why Tiled Flash Is Currently Slower
-
-The tiled implementation adds repeated per-tile work:
+Optimized tiled:
 
 ```text
-load K/V tile
-synchronize
-compute QK scores
-synchronize
-reduce tile max
-synchronize
-update online max
-synchronize
-compute exp values
-synchronize
-reduce tile sum
-synchronize
-update online sum
-synchronize
-accumulate output
-synchronize
+0.427571 ms
 ```
 
-This introduces substantial `__syncthreads()` overhead.
-
-More importantly, the current QK mapping is inefficient:
+Speedup:
 
 ```text
-one thread
--> one key
--> loops serially over all 64 head dimensions
+1.6683×
 ```
 
-With `TILE_K = 32`, only the first 32 threads participate in score calculation, while other threads in the 128-thread block are idle during that phase.
-
-Each active score thread performs 64 multiply-adds serially.
-
-That is likely the largest current compute-utilization bottleneck.
-
----
-
-## 7. Better QK Mapping
-
-The next design should use cooperative dot products:
+Latency reduction:
 
 ```text
-one warp
--> one Q · K dot product
+~40.06%
 ```
-
-For `head_dim = 64`:
-
-```text
-32 lanes
--> each lane handles about 2 dimensions
--> warp reduction combines partial sums
-```
-
-Use warp primitives such as:
-
-```cpp
-__shfl_down_sync(...)
-```
-
-This changes the score calculation from:
-
-```text
-1 thread × 64 serial dimensions
-```
-
-to roughly:
-
-```text
-32 threads × 2 dimensions + warp reduction
-```
-
-This should greatly improve utilization.
-
----
-
-## 8. Synchronization Bottleneck
-
-The current tiled kernel relies heavily on block-wide synchronization.
-
-A better kernel should replace as many shared-memory reductions as possible with warp-level operations.
-
-Priority:
-
-```text
-warp-level score reduction
-warp-level max reduction
-warp-level sum reduction
-fewer __syncthreads()
-```
-
-This is likely more important than tuning tile size right now.
-
----
-
-## 9. Memory Savings
-
-The memory improvement is already substantial.
 
 At `seq_len = 2048`:
 
 ```text
-Baseline temporary global intermediates:
-32 MB
-
-Tiled Flash full N×N intermediates:
-0 MB
+2.192138 ms
+-> 1.371023 ms
 ```
 
-The baseline's current logical intermediate traffic reaches:
+which is approximately:
+
+```text
+37.46% lower latency
+```
+
+This is a strong result for a single optimization pass.
+
+---
+
+## 6. Comparison With Naive Fused Attention
+
+The optimized tiled implementation also becomes faster than the naive fused implementation for every tested size:
+
+```text
+128:
+Naive     0.039844 ms
+Optimized 0.036782 ms
+
+256:
+Naive     0.078008 ms
+Optimized 0.070789 ms
+
+512:
+Naive     0.180675 ms
+Optimized 0.170373 ms
+
+1024:
+Naive     0.608225 ms
+Optimized 0.427571 ms
+
+2048:
+Naive     1.891523 ms
+Optimized 1.371023 ms
+```
+
+This is important because the previous tiled implementation was slower than the naive fused path.
+
+After the warp optimization, tiling + online softmax finally becomes competitive with, and consistently better than, the simpler fused implementation.
+
+This confirms that the Flash-style tiled structure itself was not the problem; the previous execution mapping was.
+
+---
+
+## 7. Baseline Still Wins
+
+Despite the large improvement, the optimized tiled implementation is still slower than baseline.
+
+At `seq_len = 2048`:
+
+```text
+Baseline:
+0.995850 ms
+
+Optimized Tiled:
+1.371023 ms
+```
+
+The optimized tiled kernel is still approximately:
+
+```text
+37.67% slower
+```
+
+At `seq_len = 1024`:
+
+```text
+Baseline:
+0.300186 ms
+
+Optimized Tiled:
+0.427571 ms
+```
+
+which is approximately:
+
+```text
+42.44% slower
+```
+
+Therefore:
+
+```text
+First optimization pass:
+successful
+
+Final performance target:
+not yet reached
+```
+
+---
+
+## 8. Why Baseline Is Still Faster
+
+The remaining performance gap is now less likely to be dominated by the local QK dot-product implementation.
+
+The next major architectural issue is:
+
+```text
+1 block = 1 query
+```
+
+This means every query block independently reloads the same K/V tiles.
+
+Conceptually:
+
+```text
+Query 0 block:
+load K tile 0
+load V tile 0
+
+Query 1 block:
+load K tile 0 again
+load V tile 0 again
+
+Query 2 block:
+load K tile 0 again
+load V tile 0 again
+```
+
+So although the optimized kernel no longer materializes `N × N` score and weight matrices, it still has substantial repeated K/V traffic.
+
+A more advanced Flash Attention mapping should process multiple query rows in the same CTA/block:
+
+```text
+one block
+=
+multiple Q rows
+×
+one K/V tile
+```
+
+Then one K/V tile load can be reused across several queries.
+
+That is the next major performance opportunity.
+
+---
+
+## 9. Memory Benefit Remains Unchanged
+
+The optimization changes compute mapping but does not change the memory-complexity advantage.
+
+Baseline temporary global memory:
+
+| SeqLen | Temporary Memory |
+|---:|---:|
+| 128 | 0.125 MB |
+| 256 | 0.500 MB |
+| 512 | 2.000 MB |
+| 1024 | 8.000 MB |
+| 2048 | 32.000 MB |
+
+The tiled Flash implementations avoid these full `scores[N,N]` and `weights[N,N]` intermediates.
+
+At `seq_len = 2048`, the baseline also performs approximately:
 
 ```text
 96 MB
 ```
 
-at `N = 2048`.
+of logical intermediate score/weight accesses according to the current kernel structure.
 
-The fused implementations avoid those score/weight global materializations.
+The Flash paths avoid this global materialization.
 
-This is **logical traffic avoided**, not guaranteed physical DRAM bytes saved, because GPU caches can absorb some accesses.
-
-Actual HBM/DRAM bytes should be confirmed with profiling counters when available.
+This remains a key architectural advantage even though latency has not yet beaten baseline.
 
 ---
 
-## 10. Why Memory Savings Do Not Yet Produce Lower Latency
+## 10. Interpretation of the Scaling Trend
 
-Current tradeoff:
+The optimization gain increases with larger sequence length:
 
 ```text
-Baseline:
-more global-memory traffic
-+
-strong specialized parallel mapping
-
-Tiled Flash:
-less global-memory traffic
-+
-weak QK thread mapping
-+
-many synchronization barriers
-+
-idle threads during score computation
+1.255×
+1.287×
+1.441×
+1.668×
+1.599×
 ```
 
-Right now:
+This is a good sign.
+
+It suggests that warp-based QK computation becomes increasingly valuable as the number of tiles and attention computations grows.
+
+The slight reduction from `1.668×` at 1024 to `1.599×` at 2048 does not invalidate the trend.
+
+Possible causes include:
+
+- occupancy limits
+- shared-memory pressure
+- cache behavior
+- more repeated K/V loads
+- output accumulation cost
+- memory subsystem pressure
+
+The next architecture change should specifically target K/V reuse.
+
+---
+
+## 11. Recommended Next Optimization
+
+The next step should be:
+
+# Multi-query-per-block tiling
+
+Instead of:
 
 ```text
-extra compute/synchronization overhead
->
-saved memory cost
+1 block = 1 query
 ```
 
-Therefore total latency is worse.
-
----
-
-## 11. Why the Baseline Is Strong
-
-The baseline kernels each have natural parallel structures:
-
-- **AttentionScores**: 2D grid over `(query, key)`
-- **Softmax**: one block per row
-- **MatMul**: 2D output-tile mapping
-
-Even though they write/read global intermediates, they expose much more fine-grained GPU parallelism than the current simplified Flash kernel.
-
----
-
-## 12. Important GPU Optimization Lesson
-
-The experiment proves:
-
-> Fewer kernel launches and fewer global-memory intermediates do not automatically imply lower latency.
-
-A fused kernel can still lose if it has:
+move toward:
 
 ```text
-lower occupancy
-poorer thread utilization
-more synchronization
-more serialized arithmetic
-worse instruction throughput
+1 block = Br query rows
 ```
 
----
-
-## 13. Current Trend
-
-Flash speedup remains around:
+For example:
 
 ```text
-0.41× to 0.53×
+Br = 4
+Br = 8
+or
+Br = 16
 ```
 
-across all tested sequence lengths.
-
-There is no clear sign yet that the current tiled implementation approaches baseline performance as `N` grows.
-
-This suggests the compute/synchronization problem is persistent rather than only a small-input overhead issue.
-
----
-
-## 14. Recommended Optimization Order
-
-### Priority 1 — Parallelize QK dot product
-
-Replace one-thread-per-dot-product with warp-cooperative dot products.
-
-### Priority 2 — Reduce synchronization
-
-Use warp reductions and warp-level synchronization where possible.
-
-### Priority 3 — Improve K/V load efficiency
-
-Check coalescing and consider vectorized loads (`float4`) after compute mapping improves.
-
-### Priority 4 — Tune `TILE_K` and block size
-
-Only after the kernel mapping is improved, benchmark variants such as:
+Then:
 
 ```text
-TILE_K = 16, 32, 64
-BLOCK_SIZE = 64, 128, 256
+load one K/V tile
 ```
+
+and reuse it for all query rows inside the block.
+
+Conceptually:
+
+```text
+Q0 ┐
+Q1 │
+Q2 │
+Q3 ├── use the same K/V tile
+...│
+QBr┘
+```
+
+This should reduce repeated global-memory traffic and move the implementation closer to the IO-aware design of real Flash Attention.
 
 ---
 
-## 15. Current Phase 5 Status
+## 12. Recommended Optimization Order From Here
+
+1. **Multi-query-per-block / Q tiling**
+   - highest priority
+
+2. **Reuse K/V tile across multiple Q rows**
+   - core IO-aware optimization
+
+3. **Profile occupancy and shared-memory pressure**
+   - especially after increasing queries per CTA
+
+4. **Tune Br / TILE_K / BLOCK_SIZE**
+   - after the new architecture works
+
+5. **Vectorized global loads**
+   - e.g. `float4`
+
+6. **Further warp specialization**
+   - separate load / compute responsibilities if useful
+
+7. **FP16 / Tensor Core path**
+   - later optimization stage
+
+---
+
+## 13. Phase 5 Progress
 
 Completed:
 
 ```text
-✅ Standard CUDA attention baseline
+✅ Baseline CUDA Attention
 ✅ Naive fused attention
-✅ Tiled K/V Flash-style attention
+✅ Tiled K/V attention
 ✅ Online softmax
 ✅ Causal masking
-✅ Removal of full N×N global intermediates
+✅ N×N intermediate elimination
 ✅ Correctness validation
-✅ Latency benchmark
-✅ Temporary-memory analysis
-✅ Logical intermediate-traffic analysis
+✅ Performance benchmark
+✅ Memory analysis
+✅ Warp-cooperative QK
+✅ Warp max reduction
+✅ Warp sum reduction
+✅ Reduced synchronization
 ```
 
-Still needed for the performance objective:
+Current result:
 
 ```text
-⬜ warp-cooperative QK computation
-⬜ fewer synchronization barriers
-⬜ improved GPU utilization
-⬜ final optimized benchmark
+Original Tiled:
+2.192138 ms at N=2048
+
+Optimized Tiled:
+1.371023 ms at N=2048
+```
+
+This is:
+
+```text
+1.5989× faster
+```
+
+than the original tiled kernel.
+
+Still remaining:
+
+```text
+⬜ Multiple query rows per CTA
+⬜ K/V reuse across Q rows
+⬜ Further shared-memory / occupancy tuning
+⬜ Final attempt to beat baseline latency
 ```
 
 ---
 
-## 16. Final Conclusion
+## 14. Final Conclusion
 
-At `seq_len = 2048`:
+The first optimization pass clearly succeeded.
 
-```text
-Baseline:
-0.999916 ms
+The data confirms that:
 
-Naive Fused:
-1.910999 ms
+> The previous one-thread-per-QK mapping and block-wide reduction strategy were major bottlenecks.
 
-Tiled Flash:
-2.193050 ms
-```
-
-The tiled version is currently about:
+Warp-cooperative score computation and warp-level reductions improve tiled Flash Attention by approximately:
 
 ```text
-2.19× slower than baseline
+1.25× to 1.67×
 ```
 
-but it simultaneously eliminates:
+across the tested sequence lengths.
+
+The optimized kernel is now consistently faster than both the original tiled implementation and the naive fused implementation.
+
+However, it is still slower than the specialized baseline.
+
+The next major bottleneck is architectural rather than local:
+
+> each block still processes only one query, causing repeated loading of the same K/V tiles.
+
+Therefore the next optimization should move to:
 
 ```text
-32 MB
+multiple queries per block
++
+shared K/V tile reuse
 ```
 
-of `scores + weights` temporary global memory and avoids approximately:
-
-```text
-96 MB
-```
-
-of logical intermediate accesses from the current baseline path.
-
-Therefore:
-
-> The algorithmic memory-complexity improvement is working, but the current thread mapping and synchronization strategy prevent the implementation from converting that memory advantage into a latency improvement.
-
-The next optimization should focus first on **parallelizing each QK dot product across a warp**.
+which is the next step toward a more faithful high-performance Flash Attention implementation.

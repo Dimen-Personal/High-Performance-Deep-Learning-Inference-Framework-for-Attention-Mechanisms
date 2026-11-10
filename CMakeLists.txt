@@ -1588,7 +1588,7 @@ add_executable(
     # Warp-Optimized Tiled Flash Attention
     # ========================================================
 
-    src/cuda/ops/flash_attention_tiled_optimized.cu
+    src/cuda/ops/flash_attention_tiled_warp_optimized.cu
 )
 
 
