@@ -1512,7 +1512,7 @@ set_property(
 
 
 # ============================================================
-# Tiled Flash Attention Correctness Test
+# Flash Attention Correctness Regression Test
 # ============================================================
 
 add_executable(
@@ -1520,13 +1520,35 @@ add_executable(
 
     tests/cuda/test_flash_attention_tiled_correctness.cu
 
+
+    # ========================================================
     # Baseline
+    # ========================================================
+
     src/cuda/ops/attention_scores.cu
     src/cuda/ops/attention_softmax.cu
     src/cuda/ops/matmul.cu
 
-    # Tiled Flash Attention
+
+    # ========================================================
+    # Original Tiled Flash Attention
+    # ========================================================
+
     src/cuda/ops/flash_attention_tiled.cu
+
+
+    # ========================================================
+    # Warp-Optimized Tiled Flash Attention
+    # ========================================================
+
+    src/cuda/ops/flash_attention_tiled_warp_optimized.cu
+
+
+    # ========================================================
+    # Multi-Query Optimized Flash Attention
+    # ========================================================
+
+    src/cuda/ops/flash_attention_multiquery_optimized.cu
 )
 
 
@@ -1548,6 +1570,7 @@ set_property(
     TARGET flash_attention_tiled_correctness_test
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
 
 
 

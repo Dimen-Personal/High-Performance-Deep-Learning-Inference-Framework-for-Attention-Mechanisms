@@ -152,7 +152,7 @@ void flash_attention_multiquery_optimized_kernel(
 
     // Output accumulators.
     // One warp handles one query.
-    float output_accumulator[MAX_DIMS_PER_LANE]
+    float output_accumulator[MAX_DIMS_PER_LANE];
 
     #pragma unroll    // 尽量把循环直接展开，因为数据量实际上很小。
     for(int i = 0; i < MAX_DIMS_PER_LANE; i++)
@@ -248,7 +248,7 @@ void flash_attention_multiquery_optimized_kernel(
                     partial_sum += __shfl_down_sync(0xffffffff, partial_sum, offset);
 
                 if(lane == 0)
-                    scores[warp_id * TILE_K + local_key] = partia_sum * scale;
+                    scores[warp_id * TILE_K + local_key] = partial_sum * scale;
             }
         }
 
@@ -373,7 +373,7 @@ void flash_attention_multiquery_optimized_kernel(
             const int d = lane + output_slot * WARP_SIZE;
 
             if(d < head_dim)
-                output[query_row * head_dim + d] = output_accumulator[output_slot] / online;
+                output[query_row * head_dim + d] = output_accumulator[output_slot] / online_sum;
         }
     }
 
@@ -410,7 +410,7 @@ void cuda_flash_attention_multiquery_optimized(
 
     
     // The number of CTA's
-    const int grid_size = (seq_len + QUERIES_PER_BLOCK - 1) / QUERIES_PER_BLOCK;
+    const int grid_size = (seq_len + QUERYS_PER_BLOCK - 1) / QUERYS_PER_BLOCK;
 
 
 
@@ -436,7 +436,7 @@ void cuda_flash_attention_multiquery_optimized(
     //     QUERIES_PER_BLOCK × TILE_K
     // ========================================================
     const std::size_t shared_floats = static_cast<std::size_t>(
-        TILE_K * head_dim + TILE_K * head_dim + QUERIES_PER_BLOCK * head_dim + QUERIES_PER_BLOCK * TILE_K
+        TILE_K * head_dim + TILE_K * head_dim + QUERYS_PER_BLOCK * head_dim + QUERYS_PER_BLOCK * TILE_K
     );
 
 

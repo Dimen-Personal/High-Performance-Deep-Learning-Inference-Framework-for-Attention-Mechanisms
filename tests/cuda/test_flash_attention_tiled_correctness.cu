@@ -1,4 +1,26 @@
-// 标准 3- kernel baseline vs. tiled online-softmax
+// ============================================================
+// Flash Attention Correctness Regression Test
+//
+// Reference:
+//
+//     AttentionScores
+//          ↓
+//     AttentionSoftmax
+//          ↓
+//     MatMul(weights, V)
+//
+// Compared implementations:
+//
+//     1. Original Tiled Flash Attention
+//
+//     2. Warp-Optimized Tiled Flash Attention
+//
+//     3. Multi-Query Optimized Flash Attention
+//
+// Every implementation is independently compared with the
+// SAME baseline output.
+// ============================================================
+
 #include "cuda/cuda_ops.cuh"
 #include "cuda/flash_attention.cuh"
 
@@ -13,6 +35,10 @@
 #include <string>
 #include <vector>
 
+
+// ============================================================
+// CUDA Error Helper
+// ============================================================
 
 #define CUDA_CHECK(call)                                                     \
     do                                                                       \
@@ -31,7 +57,7 @@
 
 
 // ============================================================
-// Error metrics
+// Error Metrics
 // ============================================================
 
 struct ErrorMetrics
@@ -39,8 +65,10 @@ struct ErrorMetrics
     double mae =
         0.0;
 
+
     double rmse =
         0.0;
+
 
     float max_error =
         0.0f;
@@ -48,7 +76,21 @@ struct ErrorMetrics
 
 
 // ============================================================
-// Deterministic initialization
+// Result for all Flash Attention versions
+// ============================================================
+
+struct FlashAttentionTestResult
+{
+    ErrorMetrics original_tiled;
+
+    ErrorMetrics warp_optimized;
+
+    ErrorMetrics multiquery_optimized;
+};
+
+
+// ============================================================
+// Deterministic Input Initialization
 // ============================================================
 
 void initialize_input(
@@ -85,7 +127,7 @@ void initialize_input(
 
 
 // ============================================================
-// Error calculation
+// Error Calculation
 // ============================================================
 
 ErrorMetrics calculate_error(
@@ -100,12 +142,18 @@ ErrorMetrics calculate_error(
     )
     {
         throw std::runtime_error(
-            "Output size mismatch."
+            "Reference/output size mismatch."
         );
     }
 
 
     ErrorMetrics metrics;
+
+
+    if(reference.empty())
+    {
+        return metrics;
+    }
 
 
     double sum_absolute =
@@ -132,14 +180,14 @@ ErrorMetrics calculate_error(
             );
 
 
-        const double absolute =
+        const double absolute_error =
             std::fabs(
                 difference
             );
 
 
         sum_absolute +=
-            absolute;
+            absolute_error;
 
 
         sum_squared +=
@@ -152,7 +200,7 @@ ErrorMetrics calculate_error(
             std::max(
                 metrics.max_error,
                 static_cast<float>(
-                    absolute
+                    absolute_error
                 )
             );
     }
@@ -161,14 +209,18 @@ ErrorMetrics calculate_error(
     metrics.mae =
         sum_absolute
         /
-        reference.size();
+        static_cast<double>(
+            reference.size()
+        );
 
 
     metrics.rmse =
         std::sqrt(
             sum_squared
             /
-            reference.size()
+            static_cast<double>(
+                reference.size()
+            )
         );
 
 
@@ -177,20 +229,26 @@ ErrorMetrics calculate_error(
 
 
 // ============================================================
-// One test
+// Run One Sequence Length
 // ============================================================
 
-ErrorMetrics run_test(
+FlashAttentionTestResult run_test(
     int seq_len,
     int head_dim
 )
 {
+    // ========================================================
+    // Tensor Sizes
+    // ========================================================
+
     const std::size_t qkv_elements =
         static_cast<std::size_t>(
             seq_len
         )
         *
-        head_dim;
+        static_cast<std::size_t>(
+            head_dim
+        );
 
 
     const std::size_t attention_elements =
@@ -198,11 +256,13 @@ ErrorMetrics run_test(
             seq_len
         )
         *
-        seq_len;
+        static_cast<std::size_t>(
+            seq_len
+        );
 
 
     // ========================================================
-    // Host
+    // Host Buffers
     // ========================================================
 
     std::vector<float> h_Q(
@@ -225,7 +285,17 @@ ErrorMetrics run_test(
     );
 
 
-    std::vector<float> h_flash(
+    std::vector<float> h_original_tiled(
+        qkv_elements
+    );
+
+
+    std::vector<float> h_warp_optimized(
+        qkv_elements
+    );
+
+
+    std::vector<float> h_multiquery_optimized(
         qkv_elements
     );
 
@@ -249,7 +319,7 @@ ErrorMetrics run_test(
 
 
     // ========================================================
-    // Device
+    // Device Buffers
     // ========================================================
 
     float* d_Q =
@@ -276,9 +346,21 @@ ErrorMetrics run_test(
         nullptr;
 
 
-    float* d_flash =
+    float* d_original_tiled =
         nullptr;
 
+
+    float* d_warp_optimized =
+        nullptr;
+
+
+    float* d_multiquery_optimized =
+        nullptr;
+
+
+    // ========================================================
+    // Allocate Q / K / V
+    // ========================================================
 
     CUDA_CHECK(
         cudaMalloc(
@@ -310,6 +392,10 @@ ErrorMetrics run_test(
     );
 
 
+    // ========================================================
+    // Baseline Intermediate Buffers
+    // ========================================================
+
     CUDA_CHECK(
         cudaMalloc(
             &d_scores,
@@ -330,6 +416,10 @@ ErrorMetrics run_test(
     );
 
 
+    // ========================================================
+    // Output Buffers
+    // ========================================================
+
     CUDA_CHECK(
         cudaMalloc(
             &d_reference,
@@ -342,7 +432,27 @@ ErrorMetrics run_test(
 
     CUDA_CHECK(
         cudaMalloc(
-            &d_flash,
+            &d_original_tiled,
+            qkv_elements
+            *
+            sizeof(float)
+        )
+    );
+
+
+    CUDA_CHECK(
+        cudaMalloc(
+            &d_warp_optimized,
+            qkv_elements
+            *
+            sizeof(float)
+        )
+    );
+
+
+    CUDA_CHECK(
+        cudaMalloc(
+            &d_multiquery_optimized,
             qkv_elements
             *
             sizeof(float)
@@ -392,6 +502,12 @@ ErrorMetrics run_test(
 
     // ========================================================
     // Baseline
+    //
+    // QK^T
+    //   ↓
+    // Softmax
+    //   ↓
+    // weights × V
     // ========================================================
 
     cuda_attention_scores(
@@ -436,14 +552,14 @@ ErrorMetrics run_test(
 
 
     // ========================================================
-    // Tiled online-softmax Flash Attention
+    // 1. Original Tiled Flash Attention
     // ========================================================
 
     cuda_flash_attention_tiled(
         d_Q,
         d_K,
         d_V,
-        d_flash,
+        d_original_tiled,
         seq_len,
         head_dim
     );
@@ -453,6 +569,48 @@ ErrorMetrics run_test(
         cudaGetLastError()
     );
 
+
+    // ========================================================
+    // 2. Warp-Optimized Tiled Flash Attention
+    // ========================================================
+
+    cuda_flash_attention_tiled_optimized(
+        d_Q,
+        d_K,
+        d_V,
+        d_warp_optimized,
+        seq_len,
+        head_dim
+    );
+
+
+    CUDA_CHECK(
+        cudaGetLastError()
+    );
+
+
+    // ========================================================
+    // 3. Multi-Query Optimized Flash Attention
+    // ========================================================
+
+    cuda_flash_attention_multiquery_optimized(
+        d_Q,
+        d_K,
+        d_V,
+        d_multiquery_optimized,
+        seq_len,
+        head_dim
+    );
+
+
+    CUDA_CHECK(
+        cudaGetLastError()
+    );
+
+
+    // ========================================================
+    // Synchronize
+    // ========================================================
 
     CUDA_CHECK(
         cudaDeviceSynchronize()
@@ -477,8 +635,8 @@ ErrorMetrics run_test(
 
     CUDA_CHECK(
         cudaMemcpy(
-            h_flash.data(),
-            d_flash,
+            h_original_tiled.data(),
+            d_original_tiled,
             qkv_elements
             *
             sizeof(float),
@@ -487,10 +645,55 @@ ErrorMetrics run_test(
     );
 
 
-    const ErrorMetrics metrics =
+    CUDA_CHECK(
+        cudaMemcpy(
+            h_warp_optimized.data(),
+            d_warp_optimized,
+            qkv_elements
+            *
+            sizeof(float),
+            cudaMemcpyDeviceToHost
+        )
+    );
+
+
+    CUDA_CHECK(
+        cudaMemcpy(
+            h_multiquery_optimized.data(),
+            d_multiquery_optimized,
+            qkv_elements
+            *
+            sizeof(float),
+            cudaMemcpyDeviceToHost
+        )
+    );
+
+
+    // ========================================================
+    // Calculate Error for Every Version
+    // ========================================================
+
+    FlashAttentionTestResult result;
+
+
+    result.original_tiled =
         calculate_error(
             h_reference,
-            h_flash
+            h_original_tiled
+        );
+
+
+    result.warp_optimized =
+        calculate_error(
+            h_reference,
+            h_warp_optimized
+        );
+
+
+    result.multiquery_optimized =
+        calculate_error(
+            h_reference,
+            h_multiquery_optimized
         );
 
 
@@ -542,12 +745,95 @@ ErrorMetrics run_test(
 
     CUDA_CHECK(
         cudaFree(
-            d_flash
+            d_original_tiled
         )
     );
 
 
-    return metrics;
+    CUDA_CHECK(
+        cudaFree(
+            d_warp_optimized
+        )
+    );
+
+
+    CUDA_CHECK(
+        cudaFree(
+            d_multiquery_optimized
+        )
+    );
+
+
+    return result;
+}
+
+
+// ============================================================
+// Pass Check
+// ============================================================
+
+bool is_passed(
+    const ErrorMetrics& metrics,
+    double mae_tolerance,
+    float max_error_tolerance
+)
+{
+    return
+        metrics.mae
+        <=
+        mae_tolerance
+        &&
+        metrics.max_error
+        <=
+        max_error_tolerance;
+}
+
+
+// ============================================================
+// Print One Result
+// ============================================================
+
+void print_result(
+    int seq_len,
+    const std::string& implementation,
+    const ErrorMetrics& metrics,
+    bool passed
+)
+{
+    std::cout
+        << std::left
+
+        << std::setw(10)
+        << seq_len
+
+        << std::setw(26)
+        << implementation
+
+        << std::setw(18)
+        << std::scientific
+        << std::setprecision(8)
+        << metrics.mae
+
+        << std::setw(18)
+        << std::scientific
+        << std::setprecision(8)
+        << metrics.rmse
+
+        << std::setw(20)
+        << std::scientific
+        << std::setprecision(8)
+        << metrics.max_error
+
+        << std::setw(12)
+        << (
+            passed
+            ?
+            "PASS"
+            :
+            "FAIL"
+        )
+
+        << std::endl;
 }
 
 
@@ -563,21 +849,39 @@ int main()
             64;
 
 
+        // ====================================================
+        // Keep original test sizes.
+        //
+        // We also add boundary-sensitive values for:
+        //
+        //     QUERIES_PER_BLOCK = 4
+        //
+        //     TILE_K = 32
+        // ====================================================
+
         const std::vector<int>
             sequence_lengths =
         {
+            1,
+            2,
+            3,
+            4,
+            5,
+
+            31,
             32,
+            33,
+
+            63,
             64,
+            65,
+
             128,
             256,
             512
         };
 
 
-        // Online softmax changes floating-point operation order
-        // more substantially than the naive fused kernel.
-        //
-        // Therefore use a slightly more relaxed tolerance.
         constexpr double MAE_TOLERANCE =
             1e-4;
 
@@ -590,18 +894,22 @@ int main()
             true;
 
 
+        // ====================================================
+        // Header
+        // ====================================================
+
         std::cout
-            << "\n============================================"
+            << "\n============================================================"
             << std::endl;
 
 
         std::cout
-            << "Tiled Flash Attention Correctness Test"
+            << "Flash Attention Correctness Regression Test"
             << std::endl;
 
 
         std::cout
-            << "============================================"
+            << "============================================================"
             << std::endl;
 
 
@@ -612,54 +920,97 @@ int main()
 
 
         std::cout
+            << "\nCompared Implementations:"
+            << std::endl;
+
+
+        std::cout
+            << "1. Original Tiled Flash Attention"
+            << std::endl;
+
+
+        std::cout
+            << "2. Warp-Optimized Tiled Flash Attention"
+            << std::endl;
+
+
+        std::cout
+            << "3. Multi-Query Optimized Flash Attention"
+            << std::endl;
+
+
+        std::cout
             << std::endl;
 
 
         std::cout
             << std::left
-            << std::setw(12)
+
+            << std::setw(10)
             << "SeqLen"
+
+            << std::setw(26)
+            << "Flash Attention Version"
+
             << std::setw(18)
             << "MAE"
+
             << std::setw(18)
             << "RMSE"
+
             << std::setw(20)
             << "MaxError"
+
             << std::setw(12)
             << "Result"
+
             << std::endl;
 
 
         std::cout
             << std::string(
-                80,
+                104,
                 '='
             )
             << std::endl;
 
+
+        // ====================================================
+        // Run Tests
+        // ====================================================
 
         for(
             int seq_len :
             sequence_lengths
         )
         {
-            const ErrorMetrics metrics =
+            const FlashAttentionTestResult result =
                 run_test(
                     seq_len,
                     HEAD_DIM
                 );
 
 
-            const bool passed =
-                (
-                    metrics.mae
-                    <=
-                    MAE_TOLERANCE
-                )
-                &&
-                (
-                    metrics.max_error
-                    <=
+            const bool original_passed =
+                is_passed(
+                    result.original_tiled,
+                    MAE_TOLERANCE,
+                    MAX_ERROR_TOLERANCE
+                );
+
+
+            const bool warp_passed =
+                is_passed(
+                    result.warp_optimized,
+                    MAE_TOLERANCE,
+                    MAX_ERROR_TOLERANCE
+                );
+
+
+            const bool multiquery_passed =
+                is_passed(
+                    result.multiquery_optimized,
+                    MAE_TOLERANCE,
                     MAX_ERROR_TOLERANCE
                 );
 
@@ -667,51 +1018,76 @@ int main()
             all_passed =
                 all_passed
                 &&
-                passed;
+                original_passed
+                &&
+                warp_passed
+                &&
+                multiquery_passed;
+
+
+            // =================================================
+            // Original Tiled
+            // =================================================
+
+            print_result(
+                seq_len,
+                "Original Tiled",
+                result.original_tiled,
+                original_passed
+            );
+
+
+            // =================================================
+            // Warp Optimized
+            // =================================================
+
+            print_result(
+                seq_len,
+                "Warp Optimized",
+                result.warp_optimized,
+                warp_passed
+            );
+
+
+            // =================================================
+            // Multi-Query Optimized
+            // =================================================
+
+            print_result(
+                seq_len,
+                "MultiQuery Optimized",
+                result.multiquery_optimized,
+                multiquery_passed
+            );
 
 
             std::cout
-                << std::left
-                << std::setw(12)
-                << seq_len
-                << std::setw(18)
-                << std::scientific
-                << std::setprecision(8)
-                << metrics.mae
-                << std::setw(18)
-                << std::scientific
-                << std::setprecision(8)
-                << metrics.rmse
-                << std::setw(20)
-                << std::scientific
-                << std::setprecision(8)
-                << metrics.max_error
-                << std::setw(12)
-                << (
-                    passed
-                    ?
-                    "PASS"
-                    :
-                    "FAIL"
+                << std::string(
+                    104,
+                    '-'
                 )
                 << std::endl;
         }
 
 
+        // ====================================================
+        // Final Result
+        // ====================================================
+
         std::cout
-            << "\n============================================"
+            << "\n============================================================"
             << std::endl;
 
 
         if(all_passed)
         {
             std::cout
-                << "ALL TILED FLASH ATTENTION TESTS PASSED."
+                << "ALL FLASH ATTENTION CORRECTNESS TESTS PASSED."
                 << std::endl;
 
 
             std::cout
-                << "============================================"
+                << "============================================================"
                 << std::endl;
 
 
@@ -720,7 +1096,12 @@ int main()
 
 
         std::cerr
-            << "TILED FLASH ATTENTION TEST FAILED."
+            << "FLASH ATTENTION CORRECTNESS TEST FAILED."
+            << std::endl;
+
+
+        std::cout
+            << "============================================================"
             << std::endl;
 
 
