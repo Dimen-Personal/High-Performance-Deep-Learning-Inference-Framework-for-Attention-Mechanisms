@@ -57,6 +57,10 @@ struct BenchmarkResult
         0;
 
 
+    // --------------------------------------------------------
+    // Latency
+    // --------------------------------------------------------
+
     float baseline_ms =
         0.0f;
 
@@ -73,6 +77,14 @@ struct BenchmarkResult
         0.0f;
 
 
+    float multiquery_ms =
+        0.0f;
+
+
+    // --------------------------------------------------------
+    // Speedup vs Baseline
+    // --------------------------------------------------------
+
     float naive_speedup =
         0.0f;
 
@@ -85,9 +97,25 @@ struct BenchmarkResult
         0.0f;
 
 
+    float multiquery_speedup =
+        0.0f;
+
+
+    // --------------------------------------------------------
+    // Direct Optimization Comparisons
+    // --------------------------------------------------------
+
     float optimized_vs_original_tiled =
         0.0f;
 
+
+    float multiquery_vs_warp_optimized =
+        0.0f;
+
+
+    // --------------------------------------------------------
+    // Memory Analysis
+    // --------------------------------------------------------
 
     double temporary_memory_mb =
         0.0;
@@ -193,8 +221,6 @@ void launch_baseline_attention(
 
 // ============================================================
 // Generic Benchmark Helper
-//
-// launch_function must launch one complete attention path.
 // ============================================================
 
 template<typename LaunchFunction>
@@ -261,7 +287,7 @@ float benchmark_kernel(
 
 
     // ========================================================
-    // Benchmark Runs
+    // Timed Runs
     // ========================================================
 
     for(
@@ -584,7 +610,7 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // 3. Original Tiled Flash Attention
+    // 3. Original Tiled
     // ========================================================
 
     const float tiled_flash_ms =
@@ -606,7 +632,7 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
-    // 4. Warp-Optimized Tiled Flash Attention
+    // 4. Warp-Optimized Tiled
     // ========================================================
 
     const float optimized_tiled_ms =
@@ -628,16 +654,33 @@ BenchmarkResult run_sequence_length(
 
 
     // ========================================================
+    // 5. Multi-Query Optimized
+    //
+    // One block handles multiple query rows.
+    //
+    // K/V tiles are reused across those queries.
+    // ========================================================
+
+    const float multiquery_ms =
+        benchmark_kernel(
+            [&]()
+            {
+                cuda_flash_attention_multiquery_optimized(
+                    d_Q,
+                    d_K,
+                    d_V,
+                    d_output,
+                    seq_len,
+                    HEAD_DIM,
+                    stream
+                );
+            },
+            stream
+        );
+
+
+    // ========================================================
     // Memory Analysis
-    //
-    // Standard Attention:
-    //
-    // scores  = N × N floats
-    // weights = N × N floats
-    //
-    // temporary memory:
-    //
-    // 2 × N² × sizeof(float)
     // ========================================================
 
     const double temporary_bytes =
@@ -650,20 +693,6 @@ BenchmarkResult run_sequence_length(
         sizeof(float);
 
 
-    // ========================================================
-    // Minimum intermediate materialization traffic
-    //
-    // scores:
-    //     write
-    //     read
-    //
-    // weights:
-    //     write
-    //     read
-    //
-    // = 4 × N² floats
-    // ========================================================
-
     const double minimum_traffic_bytes =
         4.0
         *
@@ -673,24 +702,6 @@ BenchmarkResult run_sequence_length(
         *
         sizeof(float);
 
-
-    // ========================================================
-    // Current baseline logical intermediate traffic
-    //
-    // scores:
-    //     write
-    //     read
-    //
-    // softmax:
-    //     write exp
-    //     read for normalization
-    //     write normalized weights
-    //
-    // matmul:
-    //     read weights
-    //
-    // = 6 × N² float accesses
-    // ========================================================
 
     const double baseline_logical_traffic_bytes =
         6.0
@@ -713,6 +724,10 @@ BenchmarkResult run_sequence_length(
         seq_len;
 
 
+    // --------------------------------------------------------
+    // Latency
+    // --------------------------------------------------------
+
     result.baseline_ms =
         baseline_ms;
 
@@ -729,15 +744,13 @@ BenchmarkResult run_sequence_length(
         optimized_tiled_ms;
 
 
-    // ========================================================
-    // Speedup relative to baseline
-    //
-    // > 1:
-    //     faster than baseline
-    //
-    // < 1:
-    //     slower than baseline
-    // ========================================================
+    result.multiquery_ms =
+        multiquery_ms;
+
+
+    // --------------------------------------------------------
+    // Speedup vs Baseline
+    // --------------------------------------------------------
 
     result.naive_speedup =
         baseline_ms
@@ -757,20 +770,44 @@ BenchmarkResult run_sequence_length(
         optimized_tiled_ms;
 
 
-    // ========================================================
-    // Direct optimization benefit
+    result.multiquery_speedup =
+        baseline_ms
+        /
+        multiquery_ms;
+
+
+    // --------------------------------------------------------
+    // Direct Optimization Comparison
     //
-    // Original Tiled / Optimized Tiled
-    //
-    // > 1:
-    //     optimized implementation is faster
-    // ========================================================
+    // Original Tiled
+    //      ->
+    // Warp Optimized
+    // --------------------------------------------------------
 
     result.optimized_vs_original_tiled =
         tiled_flash_ms
         /
         optimized_tiled_ms;
 
+
+    // --------------------------------------------------------
+    // Warp Optimized
+    //      ->
+    // Multi-Query Optimized
+    //
+    // > 1:
+    // Multi-query is faster.
+    // --------------------------------------------------------
+
+    result.multiquery_vs_warp_optimized =
+        optimized_tiled_ms
+        /
+        multiquery_ms;
+
+
+    // --------------------------------------------------------
+    // Memory
+    // --------------------------------------------------------
 
     result.temporary_memory_mb =
         temporary_bytes
@@ -878,24 +915,27 @@ void print_latency_results(
         << std::setw(10)
         << "SeqLen"
 
-        << std::setw(16)
+        << std::setw(14)
         << "Baseline"
 
-        << std::setw(16)
+        << std::setw(14)
         << "Naive"
 
-        << std::setw(16)
+        << std::setw(14)
         << "Tiled"
 
         << std::setw(16)
-        << "Optimized"
+        << "WarpOpt"
+
+        << std::setw(16)
+        << "MultiQuery"
 
         << std::endl;
 
 
     std::cout
         << std::string(
-            74,
+            84,
             '-'
         )
         << std::endl;
@@ -912,17 +952,17 @@ void print_latency_results(
             << std::setw(10)
             << result.seq_len
 
-            << std::setw(16)
+            << std::setw(14)
             << std::fixed
             << std::setprecision(6)
             << result.baseline_ms
 
-            << std::setw(16)
+            << std::setw(14)
             << std::fixed
             << std::setprecision(6)
             << result.naive_fused_ms
 
-            << std::setw(16)
+            << std::setw(14)
             << std::fixed
             << std::setprecision(6)
             << result.tiled_flash_ms
@@ -931,6 +971,11 @@ void print_latency_results(
             << std::fixed
             << std::setprecision(6)
             << result.optimized_tiled_ms
+
+            << std::setw(16)
+            << std::fixed
+            << std::setprecision(6)
+            << result.multiquery_ms
 
             << std::endl;
     }
@@ -956,24 +1001,30 @@ void print_speedup_results(
         << std::setw(10)
         << "SeqLen"
 
-        << std::setw(18)
+        << std::setw(16)
         << "Naive/Base"
 
-        << std::setw(18)
+        << std::setw(16)
         << "Tiled/Base"
 
-        << std::setw(20)
-        << "Optimized/Base"
+        << std::setw(18)
+        << "WarpOpt/Base"
 
-        << std::setw(22)
+        << std::setw(18)
+        << "MultiQ/Base"
+
+        << std::setw(18)
         << "Opt_vs_Tiled"
+
+        << std::setw(18)
+        << "Multi_vs_Warp"
 
         << std::endl;
 
 
     std::cout
         << std::string(
-            88,
+            114,
             '-'
         )
         << std::endl;
@@ -990,25 +1041,35 @@ void print_speedup_results(
             << std::setw(10)
             << result.seq_len
 
-            << std::setw(18)
+            << std::setw(16)
             << std::fixed
             << std::setprecision(4)
             << result.naive_speedup
 
-            << std::setw(18)
+            << std::setw(16)
             << std::fixed
             << std::setprecision(4)
             << result.tiled_speedup
 
-            << std::setw(20)
+            << std::setw(18)
             << std::fixed
             << std::setprecision(4)
             << result.optimized_speedup
 
-            << std::setw(22)
+            << std::setw(18)
+            << std::fixed
+            << std::setprecision(4)
+            << result.multiquery_speedup
+
+            << std::setw(18)
             << std::fixed
             << std::setprecision(4)
             << result.optimized_vs_original_tiled
+
+            << std::setw(18)
+            << std::fixed
+            << std::setprecision(4)
+            << result.multiquery_vs_warp_optimized
 
             << std::endl;
     }
@@ -1109,7 +1170,7 @@ int main()
 
 
         std::cout
-            << "\n============================================"
+            << "\n===================================================="
             << std::endl;
 
 
@@ -1119,7 +1180,7 @@ int main()
 
 
         std::cout
-            << "============================================"
+            << "===================================================="
             << std::endl;
 
 
@@ -1167,11 +1228,16 @@ int main()
 
 
         std::cout
+            << "5. Multi-Query Optimized Flash Attention"
+            << std::endl;
+
+
+        std::cout
             << std::endl;
 
 
         // ====================================================
-        // Run every sequence length
+        // Run all sequence lengths
         // ====================================================
 
         for(
@@ -1223,7 +1289,7 @@ int main()
 
 
         std::cout
-            << "Baseline ratios are calculated as BaselineTime / ImplementationTime."
+            << "Baseline ratios = BaselineTime / ImplementationTime."
             << std::endl;
 
 
@@ -1233,12 +1299,17 @@ int main()
 
 
         std::cout
-            << "Opt_vs_Tiled = OriginalTiledTime / OptimizedTiledTime."
+            << "Opt_vs_Tiled = OriginalTiledTime / WarpOptimizedTime."
             << std::endl;
 
 
         std::cout
-            << "Opt_vs_Tiled > 1.0 means the warp optimization improved tiled attention."
+            << "Multi_vs_Warp = WarpOptimizedTime / MultiQueryTime."
+            << std::endl;
+
+
+        std::cout
+            << "Multi_vs_Warp > 1.0 means query tiling and K/V reuse improved performance."
             << std::endl;
 
 
