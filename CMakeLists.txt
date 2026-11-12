@@ -1636,3 +1636,36 @@ set_property(
     TARGET flash_attention_benchmark
     PROPERTY CUDA_ARCHITECTURES 70
 )
+
+
+
+
+
+
+
+
+
+
+
+# ============================================================
+# CPU Fused MatMul + Bias + GELU Correctness Test
+# ============================================================
+
+add_executable(
+    cpu_fused_matmul_bias_gelu_test
+
+    tests/cpu/fused_matmul_bias_gelu_test.cpp
+
+    src/cpu/fused_matmul_bias_gelu.cpp
+
+    # Existing CPU reference kernels
+    src/ops/attention/matmul.cpp
+    src/ops/attention/gelu.cpp
+)
+
+
+target_include_directories(
+    cpu_fused_matmul_bias_gelu_test
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
