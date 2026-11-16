@@ -1700,3 +1700,58 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+
+
+
+
+
+
+
+
+
+# ============================================================
+# CPU Unfused MatMul + Bias + GELU Profile
+# ============================================================
+
+add_executable(
+    cpu_unfused_matmul_bias_gelu_profile
+
+    benchmark/cpu/profile_unfused_matmul_bias_gelu.cpp
+
+    src/cpu/fused_matmul_bias_gelu.cpp
+
+    src/ops/attention/matmul.cpp
+    src/ops/attention/gelu.cpp
+)
+
+
+target_include_directories(
+    cpu_unfused_matmul_bias_gelu_profile
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+
+
+# ============================================================
+# CPU Fused MatMul + Bias + GELU Profile
+# ============================================================
+
+add_executable(
+    cpu_fused_matmul_bias_gelu_profile
+
+    benchmark/cpu/profile_fused_matmul_bias_gelu.cpp
+
+    src/cpu/fused_matmul_bias_gelu.cpp
+
+    src/ops/attention/matmul.cpp
+    src/ops/attention/gelu.cpp
+)
+
+
+target_include_directories(
+    cpu_fused_matmul_bias_gelu_profile
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
