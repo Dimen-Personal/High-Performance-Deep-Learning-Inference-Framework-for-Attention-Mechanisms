@@ -1669,3 +1669,34 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
+
+
+
+
+
+
+
+
+
+# ============================================================
+# CPU Fused MatMul + Bias + GELU Benchmark
+# ============================================================
+
+add_executable(
+    cpu_fused_matmul_bias_gelu_benchmark
+
+    benchmark/cpu/benchmark_fused_matmul_bias_gelu.cpp
+
+    src/cpu/fused_matmul_bias_gelu.cpp
+
+    # Existing CPU reference kernels
+    src/ops/attention/matmul.cpp
+    src/ops/attention/gelu.cpp
+)
+
+
+target_include_directories(
+    cpu_fused_matmul_bias_gelu_benchmark
+    PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
