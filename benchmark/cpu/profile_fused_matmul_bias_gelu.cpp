@@ -5,12 +5,12 @@
 #include <vector>
 
 
-constexpr int M = 1024;
+constexpr int M = 512;
 constexpr int K = 512;
-constexpr int N = 1024;
+constexpr int N = 512;
 
-constexpr int WARMUP_RUNS = 2;
-constexpr int PROFILE_RUNS = 5;
+constexpr int WARMUP_RUNS = 0;
+constexpr int PROFILE_RUNS = 1;
 
 
 // Prevent the compiler from considering the result unused.
