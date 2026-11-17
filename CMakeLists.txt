@@ -1656,11 +1656,19 @@ add_executable(
 
     tests/cpu/fused_matmul_bias_gelu_test.cpp
 
+    # Stage A
     src/cpu/fused_matmul_bias_gelu.cpp
 
-    # Existing CPU reference kernels
+    # Stage B
+    src/cpu/cache_aware_attention.cpp
+
+    # CPU reference kernels
     src/ops/attention/matmul.cpp
     src/ops/attention/gelu.cpp
+    src/ops/attention/softmax.cpp
+    src/ops/attention/attention_scores.cpp
+    src/ops/attention/attention_softmax.cpp
+    src/ops/attention/scaled_dot_product_attention.cpp
 )
 
 
@@ -1687,11 +1695,19 @@ add_executable(
 
     benchmark/cpu/benchmark_fused_matmul_bias_gelu.cpp
 
+    # Stage A
     src/cpu/fused_matmul_bias_gelu.cpp
 
-    # Existing CPU reference kernels
+    # Stage B
+    src/cpu/cache_aware_attention.cpp
+
+    # CPU reference kernels
     src/ops/attention/matmul.cpp
     src/ops/attention/gelu.cpp
+    src/ops/attention/softmax.cpp
+    src/ops/attention/attention_scores.cpp
+    src/ops/attention/attention_softmax.cpp
+    src/ops/attention/scaled_dot_product_attention.cpp
 )
 
 
@@ -1700,7 +1716,6 @@ target_include_directories(
     PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
-
 
 
 

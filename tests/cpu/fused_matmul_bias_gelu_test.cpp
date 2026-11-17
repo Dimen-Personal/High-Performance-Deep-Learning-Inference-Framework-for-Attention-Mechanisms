@@ -1,4 +1,6 @@
 #include "cpu/fused_matmul_bias_gelu.h"
+#include "cpu/cache_aware_attention.h"
+#include "ops/operator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,10 +20,8 @@ struct ErrorMetrics
     double mae =
         0.0;
 
-
     double rmse =
         0.0;
-
 
     float max_error =
         0.0f;
@@ -66,7 +66,7 @@ void initialize_input(
 
 
 // ============================================================
-// Calculate Error
+// Error Calculation
 // ============================================================
 
 ErrorMetrics calculate_error(
@@ -81,12 +81,18 @@ ErrorMetrics calculate_error(
     )
     {
         throw std::runtime_error(
-            "Output size mismatch."
+            "Reference/output size mismatch."
         );
     }
 
 
     ErrorMetrics metrics;
+
+
+    if(reference.empty())
+    {
+        return metrics;
+    }
 
 
     double sum_absolute =
@@ -162,10 +168,11 @@ ErrorMetrics calculate_error(
 
 
 // ============================================================
-// One Test
+// Stage A
+// MatMul + Bias + GELU Fusion Correctness
 // ============================================================
 
-ErrorMetrics run_test(
+ErrorMetrics run_fusion_test(
     int M,
     int K,
     int N
@@ -194,10 +201,6 @@ ErrorMetrics run_test(
         *
         N;
 
-
-    // ========================================================
-    // Buffers
-    // ========================================================
 
     std::vector<float> A(
         a_elements
@@ -233,10 +236,6 @@ ErrorMetrics run_test(
         output_elements
     );
 
-
-    // ========================================================
-    // Input Initialization
-    // ========================================================
 
     initialize_input(
         A,
@@ -297,6 +296,245 @@ ErrorMetrics run_test(
 
 
 // ============================================================
+// Stage B
+// Cache-Aware Attention Correctness
+// ============================================================
+
+ErrorMetrics run_cache_aware_attention_test(
+    int seq_len,
+    int head_dim
+)
+{
+    const std::size_t elements =
+        static_cast<std::size_t>(
+            seq_len
+        )
+        *
+        head_dim;
+
+
+    std::vector<float> Q(
+        elements
+    );
+
+
+    std::vector<float> K(
+        elements
+    );
+
+
+    std::vector<float> V(
+        elements
+    );
+
+
+    std::vector<float> reference(
+        elements
+    );
+
+
+    std::vector<float> tiled_output(
+        elements
+    );
+
+
+    initialize_input(
+        Q,
+        1
+    );
+
+
+    initialize_input(
+        K,
+        17
+    );
+
+
+    initialize_input(
+        V,
+        37
+    );
+
+
+    // ========================================================
+    // Original CPU Attention Baseline
+    //
+    // QK^T
+    //   ↓
+    // scores[N,N]
+    //   ↓
+    // Softmax
+    //   ↓
+    // weights[N,N]
+    //   ↓
+    // weights × V
+    // ========================================================
+
+    scaled_dot_product_attention(
+        Q.data(),
+        K.data(),
+        V.data(),
+        reference.data(),
+        seq_len,
+        head_dim
+    );
+
+
+    // ========================================================
+    // Cache-Aware Tiled Attention
+    //
+    // Query block = 16
+    // Key block   = 32
+    // ========================================================
+
+    cache_aware_attention_tiled(
+        Q.data(),
+        K.data(),
+        V.data(),
+        tiled_output.data(),
+        seq_len,
+        head_dim,
+        16,
+        32
+    );
+
+
+    return
+        calculate_error(
+            reference,
+            tiled_output
+        );
+}
+
+
+// ============================================================
+// Print Stage A Header
+// ============================================================
+
+void print_stage_a_header()
+{
+    std::cout
+        << "\n============================================================"
+        << std::endl;
+
+
+    std::cout
+        << "Stage A - CPU MatMul + Bias + GELU Fusion Correctness"
+        << std::endl;
+
+
+    std::cout
+        << "============================================================"
+        << std::endl;
+
+
+    std::cout
+        << std::left
+
+        << std::setw(8)
+        << "M"
+
+        << std::setw(8)
+        << "K"
+
+        << std::setw(8)
+        << "N"
+
+        << std::setw(18)
+        << "MAE"
+
+        << std::setw(18)
+        << "RMSE"
+
+        << std::setw(20)
+        << "MaxError"
+
+        << std::setw(12)
+        << "Result"
+
+        << std::endl;
+
+
+    std::cout
+        << std::string(
+            92,
+            '='
+        )
+        << std::endl;
+}
+
+
+// ============================================================
+// Print Stage B Header
+// ============================================================
+
+void print_stage_b_header()
+{
+    std::cout
+        << "\n============================================================"
+        << std::endl;
+
+
+    std::cout
+        << "Stage B - CPU Cache-Aware Tiled Attention Correctness"
+        << std::endl;
+
+
+    std::cout
+        << "============================================================"
+        << std::endl;
+
+
+    std::cout
+        << "Query Block Size: 16"
+        << std::endl;
+
+
+    std::cout
+        << "Key Block Size: 32"
+        << std::endl;
+
+
+    std::cout
+        << "Head Dimension: 64"
+        << std::endl;
+
+
+    std::cout
+        << std::endl;
+
+
+    std::cout
+        << std::left
+
+        << std::setw(12)
+        << "SeqLen"
+
+        << std::setw(18)
+        << "MAE"
+
+        << std::setw(18)
+        << "RMSE"
+
+        << std::setw(20)
+        << "MaxError"
+
+        << std::setw(12)
+        << "Result"
+
+        << std::endl;
+
+
+    std::cout
+        << std::string(
+            80,
+            '='
+        )
+        << std::endl;
+}
+
+
+// ============================================================
 // Main
 // ============================================================
 
@@ -304,7 +542,15 @@ int main()
 {
     try
     {
-        struct TestShape
+        bool all_passed =
+            true;
+
+
+        // ====================================================
+        // Stage A
+        // ====================================================
+
+        struct FusionShape
         {
             int M;
             int K;
@@ -312,8 +558,8 @@ int main()
         };
 
 
-        const std::vector<TestShape>
-            shapes =
+        const std::vector<FusionShape>
+            fusion_shapes =
         {
             {1,   64,  64},
             {16,  64,  64},
@@ -323,75 +569,24 @@ int main()
         };
 
 
-        constexpr double MAE_TOLERANCE =
+        constexpr double FUSION_MAE_TOLERANCE =
             1e-6;
 
 
-        constexpr float MAX_ERROR_TOLERANCE =
+        constexpr float FUSION_MAX_ERROR_TOLERANCE =
             1e-5f;
 
 
-        bool all_passed =
-            true;
-
-
-        std::cout
-            << "\n============================================================"
-            << std::endl;
-
-
-        std::cout
-            << "CPU Fused MatMul + Bias + GELU Correctness Test"
-            << std::endl;
-
-
-        std::cout
-            << "============================================================"
-            << std::endl;
-
-
-        std::cout
-            << std::left
-
-            << std::setw(8)
-            << "M"
-
-            << std::setw(8)
-            << "K"
-
-            << std::setw(8)
-            << "N"
-
-            << std::setw(18)
-            << "MAE"
-
-            << std::setw(18)
-            << "RMSE"
-
-            << std::setw(20)
-            << "MaxError"
-
-            << std::setw(12)
-            << "Result"
-
-            << std::endl;
-
-
-        std::cout
-            << std::string(
-                92,
-                '='
-            )
-            << std::endl;
+        print_stage_a_header();
 
 
         for(
-            const TestShape& shape :
-            shapes
+            const FusionShape& shape :
+            fusion_shapes
         )
         {
             const ErrorMetrics metrics =
-                run_test(
+                run_fusion_test(
                     shape.M,
                     shape.K,
                     shape.N
@@ -401,13 +596,13 @@ int main()
             const bool passed =
                 metrics.mae
                 <=
-                MAE_TOLERANCE
+                FUSION_MAE_TOLERANCE
 
                 &&
 
                 metrics.max_error
                 <=
-                MAX_ERROR_TOLERANCE;
+                FUSION_MAX_ERROR_TOLERANCE;
 
 
             all_passed =
@@ -452,6 +647,113 @@ int main()
         }
 
 
+        // ====================================================
+        // Stage B
+        // ====================================================
+
+        constexpr int ATTENTION_HEAD_DIM =
+            64;
+
+
+        const std::vector<int>
+            sequence_lengths =
+        {
+            1,
+            2,
+
+            15,
+            16,
+            17,
+
+            31,
+            32,
+            33,
+
+            63,
+            64,
+            65,
+
+            128,
+            256,
+            512
+        };
+
+
+        constexpr double ATTENTION_MAE_TOLERANCE =
+            1e-4;
+
+
+        constexpr float ATTENTION_MAX_ERROR_TOLERANCE =
+            1e-3f;
+
+
+        print_stage_b_header();
+
+
+        for(
+            int seq_len :
+            sequence_lengths
+        )
+        {
+            const ErrorMetrics metrics =
+                run_cache_aware_attention_test(
+                    seq_len,
+                    ATTENTION_HEAD_DIM
+                );
+
+
+            const bool passed =
+                metrics.mae
+                <=
+                ATTENTION_MAE_TOLERANCE
+
+                &&
+
+                metrics.max_error
+                <=
+                ATTENTION_MAX_ERROR_TOLERANCE;
+
+
+            all_passed =
+                all_passed
+                &&
+                passed;
+
+
+            std::cout
+                << std::left
+
+                << std::setw(12)
+                << seq_len
+
+                << std::setw(18)
+                << std::scientific
+                << std::setprecision(8)
+                << metrics.mae
+
+                << std::setw(18)
+                << metrics.rmse
+
+                << std::setw(20)
+                << metrics.max_error
+
+                << std::setw(12)
+                << (
+                    passed
+                    ?
+                    "PASS"
+                    :
+                    "FAIL"
+                )
+
+                << std::endl;
+        }
+
+
+        // ====================================================
+        // Final Result
+        // ====================================================
+
         std::cout
             << "\n============================================================"
             << std::endl;
@@ -460,7 +762,7 @@ int main()
         if(all_passed)
         {
             std::cout
-                << "ALL FUSED OPERATOR TESTS PASSED."
+                << "ALL PHASE 5 ALTERNATIVE CORRECTNESS TESTS PASSED."
                 << std::endl;
 
 
@@ -474,7 +776,12 @@ int main()
 
 
         std::cerr
-            << "FUSED OPERATOR TEST FAILED."
+            << "PHASE 5 ALTERNATIVE CORRECTNESS TEST FAILED."
+            << std::endl;
+
+
+        std::cout
+            << "============================================================"
             << std::endl;
 
 

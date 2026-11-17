@@ -1,4 +1,6 @@
 #include "cpu/fused_matmul_bias_gelu.h"
+#include "cpu/cache_aware_attention.h"
+#include "ops/operator.h"
 
 #include <chrono>
 #include <cstddef>
@@ -21,10 +23,10 @@ constexpr int BENCHMARK_RUNS =
 
 
 // ============================================================
-// Benchmark Result
+// Stage A Result
 // ============================================================
 
-struct BenchmarkResult
+struct FusionBenchmarkResult
 {
     int M =
         0;
@@ -66,7 +68,38 @@ struct BenchmarkResult
 
 
 // ============================================================
-// Deterministic Input Initialization
+// Stage B Result
+// ============================================================
+
+struct AttentionBenchmarkResult
+{
+    int seq_len =
+        0;
+
+
+    double baseline_ms =
+        0.0;
+
+
+    double tiled_ms =
+        0.0;
+
+
+    double speedup =
+        0.0;
+
+
+    double baseline_temp_mb =
+        0.0;
+
+
+    double tiled_working_set_kb =
+        0.0;
+};
+
+
+// ============================================================
+// Deterministic Initialization
 // ============================================================
 
 void initialize_input(
@@ -103,7 +136,7 @@ void initialize_input(
 
 
 // ============================================================
-// Generic CPU Benchmark
+// Generic Benchmark Helper
 // ============================================================
 
 template<typename Function>
@@ -164,19 +197,16 @@ double benchmark_function(
 
 
 // ============================================================
-// Run One Shape
+// Stage A
+// Fusion Benchmark
 // ============================================================
 
-BenchmarkResult run_shape(
+FusionBenchmarkResult run_fusion_shape(
     int M,
     int K,
     int N
 )
 {
-    // ========================================================
-    // Tensor Sizes
-    // ========================================================
-
     const std::size_t a_elements =
         static_cast<std::size_t>(
             M
@@ -201,10 +231,6 @@ BenchmarkResult run_shape(
         N;
 
 
-    // ========================================================
-    // Buffers
-    // ========================================================
-
     std::vector<float> A(
         a_elements
     );
@@ -219,10 +245,6 @@ BenchmarkResult run_shape(
         N
     );
 
-
-    // --------------------------------------------------------
-    // Unfused temporary buffers
-    // --------------------------------------------------------
 
     std::vector<float> temp_matmul(
         output_elements
@@ -239,18 +261,10 @@ BenchmarkResult run_shape(
     );
 
 
-    // --------------------------------------------------------
-    // Fused output
-    // --------------------------------------------------------
-
     std::vector<float> fused_output(
         output_elements
     );
 
-
-    // ========================================================
-    // Initialize
-    // ========================================================
 
     initialize_input(
         A,
@@ -271,7 +285,7 @@ BenchmarkResult run_shape(
 
 
     // ========================================================
-    // Unfused Benchmark
+    // Unfused
     // ========================================================
 
     const double unfused_ms =
@@ -294,7 +308,7 @@ BenchmarkResult run_shape(
 
 
     // ========================================================
-    // Fused Benchmark
+    // Fused
     // ========================================================
 
     const double fused_ms =
@@ -314,10 +328,6 @@ BenchmarkResult run_shape(
         );
 
 
-    // ========================================================
-    // Memory Analysis
-    // ========================================================
-
     const double output_bytes =
         static_cast<double>(
             output_elements
@@ -326,63 +336,15 @@ BenchmarkResult run_shape(
         sizeof(float);
 
 
-    // ========================================================
-    // Unfused Temporary Memory
-    //
-    // temp_matmul[M,N]
-    //
-    // +
-    //
-    // temp_bias[M,N]
-    // ========================================================
-
     const double unfused_temporary_bytes =
         2.0
         *
         output_bytes;
 
 
-    // ========================================================
-    // Fused Temporary Memory
-    //
-    // No M×N intermediate tensors.
-    // ========================================================
-
     const double fused_temporary_bytes =
         0.0;
 
-
-    // ========================================================
-    // Estimated Intermediate Traffic
-    //
-    // Unfused:
-    //
-    // 1. MatMul writes temp_matmul
-    //
-    // 2. Bias reads temp_matmul
-    //
-    // 3. Bias writes temp_bias
-    //
-    // 4. GELU reads temp_bias
-    //
-    // 5. GELU writes final output
-    //
-    // = 5 × M × N floats
-    //
-    //
-    // Fused:
-    //
-    // only final output write
-    //
-    // = 1 × M × N floats
-    //
-    // NOTE:
-    //
-    // This is only intermediate/output traffic.
-    //
-    // It intentionally excludes A/B reads because both
-    // implementations perform the same MatMul.
-    // ========================================================
 
     const double unfused_traffic_bytes =
         5.0
@@ -396,11 +358,7 @@ BenchmarkResult run_shape(
         output_bytes;
 
 
-    // ========================================================
-    // Build Result
-    // ========================================================
-
-    BenchmarkResult result;
+    FusionBenchmarkResult result;
 
 
     result.M =
@@ -474,15 +432,252 @@ BenchmarkResult run_shape(
 
 
 // ============================================================
-// Print Performance Table
+// Stage B
+// Cache-Aware Attention Benchmark
 // ============================================================
 
-void print_performance_results(
-    const std::vector<BenchmarkResult>& results
+AttentionBenchmarkResult run_attention_shape(
+    int seq_len,
+    int head_dim
+)
+{
+    const std::size_t elements =
+        static_cast<std::size_t>(
+            seq_len
+        )
+        *
+        head_dim;
+
+
+    std::vector<float> Q(
+        elements
+    );
+
+
+    std::vector<float> K(
+        elements
+    );
+
+
+    std::vector<float> V(
+        elements
+    );
+
+
+    std::vector<float> baseline_output(
+        elements
+    );
+
+
+    std::vector<float> tiled_output(
+        elements
+    );
+
+
+    initialize_input(
+        Q,
+        1
+    );
+
+
+    initialize_input(
+        K,
+        17
+    );
+
+
+    initialize_input(
+        V,
+        37
+    );
+
+
+    // ========================================================
+    // Baseline
+    // ========================================================
+
+    const double baseline_ms =
+        benchmark_function(
+            [&]()
+            {
+                scaled_dot_product_attention(
+                    Q.data(),
+                    K.data(),
+                    V.data(),
+                    baseline_output.data(),
+                    seq_len,
+                    head_dim
+                );
+            }
+        );
+
+
+    // ========================================================
+    // Cache-Aware Tiled
+    // ========================================================
+
+    constexpr int QUERY_BLOCK_SIZE =
+        16;
+
+
+    constexpr int KEY_BLOCK_SIZE =
+        32;
+
+
+    const double tiled_ms =
+        benchmark_function(
+            [&]()
+            {
+                cache_aware_attention_tiled(
+                    Q.data(),
+                    K.data(),
+                    V.data(),
+                    tiled_output.data(),
+                    seq_len,
+                    head_dim,
+                    QUERY_BLOCK_SIZE,
+                    KEY_BLOCK_SIZE
+                );
+            }
+        );
+
+
+    // ========================================================
+    // Baseline Temporary Memory
+    //
+    // scores[N,N]
+    // weights[N,N]
+    // ========================================================
+
+    const double baseline_temp_bytes =
+        2.0
+        *
+        static_cast<double>(
+            seq_len
+        )
+        *
+        static_cast<double>(
+            seq_len
+        )
+        *
+        sizeof(float);
+
+
+    // ========================================================
+    // Tiled Working Set
+    //
+    // q_tile
+    // k_tile
+    // v_tile
+    // score_tile
+    // row_max
+    // row_sum
+    // output_accumulator
+    // ========================================================
+
+    const double tiled_floats =
+        static_cast<double>(
+            QUERY_BLOCK_SIZE
+            *
+            head_dim
+        )
+        +
+        static_cast<double>(
+            KEY_BLOCK_SIZE
+            *
+            head_dim
+        )
+        +
+        static_cast<double>(
+            KEY_BLOCK_SIZE
+            *
+            head_dim
+        )
+        +
+        static_cast<double>(
+            QUERY_BLOCK_SIZE
+            *
+            KEY_BLOCK_SIZE
+        )
+        +
+        QUERY_BLOCK_SIZE
+        +
+        QUERY_BLOCK_SIZE
+        +
+        static_cast<double>(
+            QUERY_BLOCK_SIZE
+            *
+            head_dim
+        );
+
+
+    const double tiled_bytes =
+        tiled_floats
+        *
+        sizeof(float);
+
+
+    AttentionBenchmarkResult result;
+
+
+    result.seq_len =
+        seq_len;
+
+
+    result.baseline_ms =
+        baseline_ms;
+
+
+    result.tiled_ms =
+        tiled_ms;
+
+
+    result.speedup =
+        baseline_ms
+        /
+        tiled_ms;
+
+
+    result.baseline_temp_mb =
+        baseline_temp_bytes
+        /
+        (
+            1024.0
+            *
+            1024.0
+        );
+
+
+    result.tiled_working_set_kb =
+        tiled_bytes
+        /
+        1024.0;
+
+
+    return result;
+}
+
+
+// ============================================================
+// Print Stage A Performance
+// ============================================================
+
+void print_fusion_performance(
+    const std::vector<FusionBenchmarkResult>& results
 )
 {
     std::cout
-        << "\nPerformance Results"
+        << "\n============================================================"
+        << std::endl;
+
+
+    std::cout
+        << "Stage A - CPU MatMul + Bias + GELU Fusion Benchmark"
+        << std::endl;
+
+
+    std::cout
+        << "============================================================"
         << std::endl;
 
 
@@ -519,7 +714,7 @@ void print_performance_results(
 
 
     for(
-        const BenchmarkResult& result :
+        const FusionBenchmarkResult& result :
         results
     )
     {
@@ -541,12 +736,9 @@ void print_performance_results(
             << result.unfused_ms
 
             << std::setw(18)
-            << std::fixed
-            << std::setprecision(6)
             << result.fused_ms
 
             << std::setw(16)
-            << std::fixed
             << std::setprecision(4)
             << result.speedup
 
@@ -556,15 +748,15 @@ void print_performance_results(
 
 
 // ============================================================
-// Print Memory Table
+// Print Stage A Memory
 // ============================================================
 
-void print_memory_results(
-    const std::vector<BenchmarkResult>& results
+void print_fusion_memory(
+    const std::vector<FusionBenchmarkResult>& results
 )
 {
     std::cout
-        << "\nIntermediate Memory / Traffic"
+        << "\nStage A - Intermediate Memory / Traffic"
         << std::endl;
 
 
@@ -604,7 +796,7 @@ void print_memory_results(
 
 
     for(
-        const BenchmarkResult& result :
+        const FusionBenchmarkResult& result :
         results
     )
     {
@@ -626,19 +818,123 @@ void print_memory_results(
             << result.unfused_temporary_memory_mb
 
             << std::setw(20)
-            << std::fixed
-            << std::setprecision(4)
             << result.fused_temporary_memory_mb
 
             << std::setw(24)
-            << std::fixed
-            << std::setprecision(4)
             << result.unfused_intermediate_traffic_mb
 
             << std::setw(22)
-            << std::fixed
-            << std::setprecision(4)
             << result.fused_intermediate_traffic_mb
+
+            << std::endl;
+    }
+}
+
+
+// ============================================================
+// Print Stage B
+// ============================================================
+
+void print_attention_results(
+    const std::vector<AttentionBenchmarkResult>& results
+)
+{
+    std::cout
+        << "\n============================================================"
+        << std::endl;
+
+
+    std::cout
+        << "Stage B - CPU Cache-Aware Attention Benchmark"
+        << std::endl;
+
+
+    std::cout
+        << "============================================================"
+        << std::endl;
+
+
+    std::cout
+        << "Query Block Size: 16"
+        << std::endl;
+
+
+    std::cout
+        << "Key Block Size: 32"
+        << std::endl;
+
+
+    std::cout
+        << "Head Dimension: 64"
+        << std::endl;
+
+
+    std::cout
+        << std::endl;
+
+
+    std::cout
+        << std::left
+
+        << std::setw(12)
+        << "SeqLen"
+
+        << std::setw(18)
+        << "Baseline(ms)"
+
+        << std::setw(18)
+        << "Tiled(ms)"
+
+        << std::setw(16)
+        << "Speedup"
+
+        << std::setw(22)
+        << "BaseTemp(MB)"
+
+        << std::setw(22)
+        << "TileWorking(KB)"
+
+        << std::endl;
+
+
+    std::cout
+        << std::string(
+            108,
+            '-'
+        )
+        << std::endl;
+
+
+    for(
+        const AttentionBenchmarkResult& result :
+        results
+    )
+    {
+        std::cout
+            << std::left
+
+            << std::setw(12)
+            << result.seq_len
+
+            << std::setw(18)
+            << std::fixed
+            << std::setprecision(6)
+            << result.baseline_ms
+
+            << std::setw(18)
+            << result.tiled_ms
+
+            << std::setw(16)
+            << std::setprecision(4)
+            << result.speedup
+
+            << std::setw(22)
+            << std::setprecision(4)
+            << result.baseline_temp_mb
+
+            << std::setw(22)
+            << std::setprecision(4)
+            << result.tiled_working_set_kb
 
             << std::endl;
     }
@@ -653,46 +949,13 @@ int main()
 {
     try
     {
-        struct BenchmarkShape
-        {
-            int M;
-            int K;
-            int N;
-        };
-
-
-        // ====================================================
-        // Shapes
-        //
-        // These progressively increase the output matrix size
-        // and therefore increase intermediate memory traffic.
-        // ====================================================
-
-        const std::vector<BenchmarkShape>
-            shapes =
-        {
-            {32,  128, 128},
-            {64,  256, 256},
-            {128, 256, 512},
-            {256, 512, 512},
-            {512, 512, 512},
-
-            {768, 512, 768},
-            {1024, 512, 1024}
-        };
-
-
-        std::vector<BenchmarkResult>
-            results;
-
-
         std::cout
             << "\n============================================================"
             << std::endl;
 
 
         std::cout
-            << "CPU MatMul + Bias + GELU Fusion Benchmark"
+            << "Phase 5 Alternative CPU Optimization Benchmark"
             << std::endl;
 
 
@@ -713,36 +976,42 @@ int main()
             << std::endl;
 
 
-        std::cout
-            << "\nCompared Implementations:"
-            << std::endl;
-
-
-        std::cout
-            << "1. Unfused: MatMul -> Bias -> GELU"
-            << std::endl;
-
-
-        std::cout
-            << "2. Fused: MatMul + Bias + GELU"
-            << std::endl;
-
-
-        std::cout
-            << std::endl;
-
-
         // ====================================================
-        // Run
+        // Stage A
         // ====================================================
+
+        struct FusionShape
+        {
+            int M;
+            int K;
+            int N;
+        };
+
+
+        const std::vector<FusionShape>
+            fusion_shapes =
+        {
+            {32,   128, 128},
+            {64,   256, 256},
+            {128,  256, 512},
+            {256,  512, 512},
+            {512,  512, 512},
+            {768,  512, 768},
+            {1024, 512, 1024}
+        };
+
+
+        std::vector<FusionBenchmarkResult>
+            fusion_results;
+
 
         for(
-            const BenchmarkShape& shape :
-            shapes
+            const FusionShape& shape :
+            fusion_shapes
         )
         {
             std::cout
-                << "Running M="
+                << "Running Fusion M="
                 << shape.M
                 << ", K="
                 << shape.K
@@ -752,8 +1021,8 @@ int main()
                 << std::endl;
 
 
-            results.push_back(
-                run_shape(
+            fusion_results.push_back(
+                run_fusion_shape(
                     shape.M,
                     shape.K,
                     shape.N
@@ -762,17 +1031,61 @@ int main()
         }
 
 
-        // ====================================================
-        // Results
-        // ====================================================
-
-        print_performance_results(
-            results
+        print_fusion_performance(
+            fusion_results
         );
 
 
-        print_memory_results(
-            results
+        print_fusion_memory(
+            fusion_results
+        );
+
+
+        // ====================================================
+        // Stage B
+        // ====================================================
+
+        constexpr int ATTENTION_HEAD_DIM =
+            64;
+
+
+        const std::vector<int>
+            attention_sequence_lengths =
+        {
+            128,
+            256,
+            512,
+            1024
+        };
+
+
+        std::vector<AttentionBenchmarkResult>
+            attention_results;
+
+
+        for(
+            int seq_len :
+            attention_sequence_lengths
+        )
+        {
+            std::cout
+                << "Running Attention seq_len="
+                << seq_len
+                << "..."
+                << std::endl;
+
+
+            attention_results.push_back(
+                run_attention_shape(
+                    seq_len,
+                    ATTENTION_HEAD_DIM
+                )
+            );
+        }
+
+
+        print_attention_results(
+            attention_results
         );
 
 
@@ -786,27 +1099,32 @@ int main()
 
 
         std::cout
-            << "Speedup = UnfusedTime / FusedTime."
+            << "Stage A speedup = UnfusedTime / FusedTime."
             << std::endl;
 
 
         std::cout
-            << "Speedup > 1.0 means fusion is faster."
+            << "Stage B speedup = BaselineAttentionTime / TiledAttentionTime."
             << std::endl;
 
 
         std::cout
-            << "Temporary memory counts only MxN intermediate tensors."
+            << "Speedup > 1.0 means the optimized version is faster."
             << std::endl;
 
 
         std::cout
-            << "Traffic values are logical intermediate/output traffic estimates."
+            << "Stage A traffic values are logical intermediate/output traffic estimates."
             << std::endl;
 
 
         std::cout
-            << "A/B MatMul reads are excluded because both versions require them."
+            << "Stage B baseline temporary memory counts scores[N,N] + weights[N,N]."
+            << std::endl;
+
+
+        std::cout
+            << "Stage B tiled working-set memory is approximately independent of sequence length."
             << std::endl;
 
 
