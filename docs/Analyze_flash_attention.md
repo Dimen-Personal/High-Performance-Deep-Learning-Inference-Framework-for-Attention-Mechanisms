@@ -1,4 +1,0 @@
-我们发现flash attention竟然比baseline都慢，因此先分析一下这个flash attention的性能瓶颈在哪里
-
-
-
