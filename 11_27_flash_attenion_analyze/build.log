@@ -1,0 +1,54 @@
+[  0%] Building CXX object CMakeFiles/graph_test.dir/tests/cpp/test_graph.cpp.o
+[  0%] Building CXX object CMakeFiles/gemm_benchmark.dir/benchmark/benchmark_gemm.cpp.o
+[  0%] Building CXX object CMakeFiles/gemm_test.dir/tests/cpp/test_gemm.cpp.o
+[  1%] Building CXX object CMakeFiles/ops_test.dir/tests/cpp/test_ops.cpp.o
+[  1%] Building CXX object CMakeFiles/gemm_test.dir/src/utils/matrix.cpp.o
+/root/High-Performance-Deep-Learning-Inference-Framework-for-Attention-Mechanisms/tests/cpp/test_ops.cpp: In function ‘void test_attention_softmax()’:
+/root/High-Performance-Deep-Learning-Inference-Framework-for-Attention-Mechanisms/tests/cpp/test_ops.cpp:311:20: error: ‘INFINITY’ was not declared in this scope
+  311 |         41.0122f, -INFINITY, -INFINITY,
+      |                    ^~~~~~~~
+/root/High-Performance-Deep-Learning-Inference-Framework-for-Attention-Mechanisms/tests/cpp/test_ops.cpp:314:5: error: could not convert ‘{4.10121994e+1f, <expression error>, <expression error>, 3.23760009e+0f, 2.9138e+0f, <expression error>, 1.46300006e+0f, 2.76300013e-1f, 1.08959997e+0f}’ from ‘<brace-enclosed initializer list>’ to ‘std::vector<float>’
+  314 |     };
+      |     ^
+      |     |
+      |     <brace-enclosed initializer list>
+[  1%] Building CXX object CMakeFiles/gemm_benchmark.dir/src/gemm/naive_gemm.cpp.o
+gmake[2]: *** [CMakeFiles/ops_test.dir/build.make:76: CMakeFiles/ops_test.dir/tests/cpp/test_ops.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:223: CMakeFiles/ops_test.dir/all] Error 2
+gmake[1]: *** Waiting for unfinished jobs....
+[  2%] Building CXX object CMakeFiles/gemm_benchmark.dir/src/gemm/reordered_gemm.cpp.o
+[  2%] Building CXX object CMakeFiles/gemm_benchmark.dir/src/gemm/unrolled_gemm.cpp.o
+[  2%] Building CXX object CMakeFiles/gemm_benchmark.dir/src/gemm/blocked_gemm.cpp.o
+[  2%] Building CXX object CMakeFiles/gemm_benchmark.dir/src/gemm/blocked2_gemm.cpp.o
+[  2%] Building CXX object CMakeFiles/graph_test.dir/src/tensor/tensor.cpp.o
+[  2%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/naive_gemm.cpp.o
+[  2%] Building CXX object CMakeFiles/gemm_benchmark.dir/src/gemm/simd_gemm.cpp.o
+/root/High-Performance-Deep-Learning-Inference-Framework-for-Attention-Mechanisms/src/gemm/simd_gemm.cpp:2:10: fatal error: arm_neon.h: No such file or directory
+    2 | #include <arm_neon.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/gemm_benchmark.dir/build.make:160: CMakeFiles/gemm_benchmark.dir/src/gemm/simd_gemm.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:197: CMakeFiles/gemm_benchmark.dir/all] Error 2
+[  2%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/reordered_gemm.cpp.o
+[  2%] Building CXX object CMakeFiles/graph_test.dir/src/graph/graph.cpp.o
+[  3%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/unrolled_gemm.cpp.o
+[  3%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/blocked_gemm.cpp.o
+[  3%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/blocked2_gemm.cpp.o
+[  4%] Building CXX object CMakeFiles/graph_test.dir/src/graph/node.cpp.o
+[  4%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/simd_gemm.cpp.o
+/root/High-Performance-Deep-Learning-Inference-Framework-for-Attention-Mechanisms/src/gemm/simd_gemm.cpp:2:10: fatal error: arm_neon.h: No such file or directory
+    2 | #include <arm_neon.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/gemm_test.dir/build.make:174: CMakeFiles/gemm_test.dir/src/gemm/simd_gemm.cpp.o] Error 1
+gmake[2]: *** Waiting for unfinished jobs....
+[  4%] Building CXX object CMakeFiles/gemm_test.dir/src/gemm/simd_blocked_gemm.cpp.o
+/root/High-Performance-Deep-Learning-Inference-Framework-for-Attention-Mechanisms/src/gemm/simd_blocked_gemm.cpp:2:10: fatal error: arm_neon.h: No such file or directory
+    2 | #include <arm_neon.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+gmake[2]: *** [CMakeFiles/gemm_test.dir/build.make:188: CMakeFiles/gemm_test.dir/src/gemm/simd_blocked_gemm.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:171: CMakeFiles/gemm_test.dir/all] Error 2
+[  4%] Linking CXX executable graph_test
+[  4%] Built target graph_test
+gmake: *** [Makefile:91: all] Error 2
